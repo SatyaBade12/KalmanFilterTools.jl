@@ -11,7 +11,7 @@ Because such operations are very often computed in an iterative manner, all oper
 KalmanFilterTools is available on GitLab:
 
 ```
-julia> Pkg.add("https://gitlab.com/MichelJuillard/KalmanFilterTools")
+(v1.3) pkg> add https://gitlab.com/MichelJuillard/KalmanFilterTools
 ```
 
 ## Julia version
