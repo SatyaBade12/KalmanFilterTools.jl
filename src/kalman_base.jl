@@ -28,16 +28,6 @@ function get_cholF!(cholF::AbstractArray{T}, F::AbstractArray{T}) where T <: Abs
     LAPACK.potrf!('U', cholF)
 end
 
-function get_F!(f::AbstractArray{T}, zp::AbstractArray{T}, z::AbstractArray{T}, p::AbstractArray{T}) where T <: AbstractFloat
-    mul!(zp, z, p)
-    mul!(f, zp, transpose(z))
-end
-
-function get_F!(f::AbstractArray{T}, zp::AbstractArray{T}, z::AbstractVector{U}, p::AbstractArray{T}) where {T <: AbstractFloat, U <: Integer}
-    zp .= view(p, z, :)
-    f .= view(zp, :, z)
-end
-
 function get_Fstar!(z::AbstractVector{T}, p::AbstractArray{T}, h::T, ukstar::AbstractVector{T}) where T <: AbstractFloat
     mul!(ukstar, p, z)
     Fstar = BLAS.dot(z, ukstar) + h                 # F_{*,t} in 5.7 in DK (2012), relies on H being diagonal
