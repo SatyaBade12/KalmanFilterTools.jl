@@ -828,7 +828,7 @@ end
 
 # Filters
 
-function kalman_filter_1!(Y::AbstractArray{U},
+function kalman_filter!(Y::AbstractArray{U},
                         c::AbstractArray{U},
                         Z::AbstractArray{W},
                         H::AbstractArray{U},
