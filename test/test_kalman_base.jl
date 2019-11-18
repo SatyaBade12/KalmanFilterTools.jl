@@ -185,7 +185,7 @@ c = randn(ny)
 vc = view(c, 1:ny)
 vZ = view(Z, 1:ny, :)
 va = view(a_0, :)
-full_data_pattern .= [collect(1:ny)]
+full_data_pattern = [collect(1:ny)]
 pattern = full_data_pattern[1]
 
 KalmanFilterTools.get_v!(vv, y, vc, vZ, va, 1, pattern)
