@@ -5,7 +5,7 @@ include("kalman_base.jl")
 """
 State space specification:
     y_t = Z*a_t + epsilon_t
-    a_t = T*a_{t-1} + R eta_t
+    a_{t+1} = T*a_t- + R eta_t
     E(epsilon_t epsilon_t') = H
     E(eta_t eta_t') = Q
 """
@@ -914,6 +914,8 @@ function kalman_filter!(Y::AbstractArray{U},
                 update_P!(vP1, vT, ws.QQ, vK, vZP, ws.PTmp)
                 ws.oldP .-= vP
                 if norm(ws.oldP) < ns*eps()
+                    println(norm(ws.oldP))
+                    println(t)
                     steady = true
                 else
                     copy!(ws.oldP, vP)
