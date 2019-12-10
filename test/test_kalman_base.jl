@@ -64,7 +64,7 @@ KalmanFilterTools.update_N!(N1, z, iFZ1, L, N, Ptmp)
 
 # V_t = P_t - P_t*N_{t-1}*P_t
 V = Matrix{Float64}(undef, ns, ns)
-KalmanFilterTools.get_V!(V, P, N1, Ptmp)
+KalmanFilterTools.get_Valpha!(V, P, N1, Ptmp)
 @test V ≈ P - P*N1*P
 
 R = randn(ns, np)
@@ -74,6 +74,57 @@ QQ = zeros(ns, ns)
 RQ = zeros(ns, np)
 KalmanFilterTools.get_QQ!(QQ, R, Q, RQ)
 @test QQ ≈ R*Q*R'
+
+# Vepsilon_t = H - H*D_t*H
+Vepsilon = zeros(ny, ny)
+H = randn(ny, ny)
+D = randn(ny, ny)
+tmp = zeros(ny, ny)
+KalmanFilterTools.get_Vepsilon!(Vepsilon, H, D, tmp)
+@test Vepsilon ≈ H - H*D*H 
+
+# Veta_t = Q - Q*R'*N_t*R*Q
+Veta = zeros(np, np)
+Q = zeros(np, np)
+R = randn(ns, np)
+N = randn(ns, ns)
+RQ = zeros(ns, np)
+tmp = zeros(ns, np)
+KalmanFilterTools.get_Veta!(Veta, Q, R, N, RQ, tmp)
+@test Veta ≈ Q - Q*R'*N*R*Q
+
+# D = inv(F_t) + K_t*T*N_t*T'*K'
+D = zeros(ny, ny)
+A = randn(ny, ny)
+cholF = cholesky(A'*A)
+K = randn(ny, ns)
+T = randn(ns, ns)
+N = randn(ns, ns)
+tmp = zeros(ny, ns)
+KT = zeros(ny, ns)
+KalmanFilterTools.get_D!(D, cholF.U, K, T, N, KT, tmp)
+@test D ≈ inv(A'A) + K*T*N*T'*K'
+    
+# epsilonh_t = H*(iF_t*v_t - K_t*T*r_t)
+epsilon = zeros(ny)
+H = randn(ny, ny)
+v = randn(ny)
+K = randn(ny, ns)
+T = randn(ns, ns)
+r = randn(ns)
+tmp1 = zeros(ny)
+tmp2 = zeros(ns)
+KalmanFilterTools.get_epsilonh!(epsilon, H, iFv, K, T, r, tmp1, tmp2)
+@test epsilon ≈ H*(iFv - K*T*r)
+
+# etah = Q*R'*r_t
+eta = zeros(np)
+Q = randn(np, np)
+R = randn(ns, np)
+r = randn(ns)
+tmp = zeros(np)
+KalmanFilterTools.get_etah!(eta, Q, R, r, tmp)
+@test eta ≈ Q*R'*r
 
 H = randn(ny, ny)
 H = H'*H

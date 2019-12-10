@@ -19,13 +19,49 @@ end
 
 # alphah_t = a_t + P_t*r_{t-1}
 function get_alphah!(alphah::AbstractVector{T}, a::AbstractVector{T}, P::AbstractArray{T}, r::AbstractVector{T}) where T <: AbstractFloat
-    copy!(alphah, a)
+    alphah .= a
     gemm!('N', 'N', 1.0, P, r, 1.0, alphah)
 end
 
 function get_cholF!(cholF::AbstractArray{T}, F::AbstractArray{T}) where T <: AbstractFloat
     cholF .= 0.5.*(F .+ transpose(F))
     LAPACK.potrf!('U', cholF)
+end
+
+# D = inv(F_t) + K_t*T*N_t*T'*K'
+function get_D!(D, cholF, K, T, N, KT, tmp)
+    copy!(D, cholF)
+    LAPACK.potri!('U', D)
+    # complete lower trianle and change sign of entire matrix
+    n = size(D,1)
+    @inbounds for i = 1:n
+        @simd for j = i:n
+            D[j, i] = D[i, j]
+        end
+    end
+    mul!(KT, K, T)
+    mul!(tmp, KT, N)
+    mul!(D, tmp, KT', 1.0, 1.0)
+end
+
+# epsilonh_t = H*(iF_t*v_t - K_t*T*r_t)
+function get_epsilonh!(epsilon::AbstractVector{U}, H::AbstractMatrix{U},
+                       iFv::AbstractVector{U}, K::AbstractMatrix{U},
+                       T::AbstractMatrix{U}, r::AbstractVector{U},
+                       tmp1::AbstractVector{U},
+                       tmp2::AbstractVector{U}) where U <: AbstractFloat
+    copy!(tmp1, iFv)
+    mul!(tmp2, T, r)
+    mul!(tmp1, K, tmp2, -1.0, 1.0)
+    mul!(epsilon, H, tmp1)
+end
+
+# etah = Q*R'*r_t
+function get_etah!(etah::AbstractVector{T}, Q::AbstractMatrix{T},
+                   R::AbstractMatrix{T}, r::AbstractVector{T},
+                   tmp::AbstractVector{T}) where T <: AbstractFloat
+    mul!(tmp, R', r)
+    mul!(etah, Q, tmp)
 end
 
 function get_F!(f::AbstractArray{T}, zp::AbstractArray{T}, z::AbstractArray{T}, p::AbstractArray{T}) where T <: AbstractFloat
@@ -57,6 +93,17 @@ function get_Finf!(z::U, p::AbstractArray{T}, ukinf::AbstractVector{T}) where {T
     ukinf .= view(p, :, z)
     Finf  = BLAS.dot(z, ukinf)                         # F_{\infty,t} in 5.7 in DK (2012), relies on H being diagonal
 end
+
+function get_iF!(iF::AbstractArray{T}, cholF::AbstractArray{T}) where T <: AbstractFloat
+    copy!(iFZ, Z)
+    LAPACK.potri!('U', cholF)
+end
+
+function get_iFZ!(iFZ::AbstractArray{T}, cholF::AbstractArray{T}, Z::AbstractArray{T}) where T <: AbstractFloat
+    copy!(iFZ, Z)
+    LAPACK.potrs!('U', cholF, iFZ)
+end
+
 function get_Kstar!(Kstar::AbstractArray{T}, Z::AbstractArray{T}, Pstar::AbstractArray{T}, Fstar::AbstractArray{T}, K::AbstractArray{T}, cholF::AbstractArray{T}) where T <: AbstractFloat
     mul!(Kstar, Z, Pstar)
     gemm!('N', 'N', -1.0, Fstar, K, 1.0, Kstar)
@@ -136,7 +183,7 @@ end
 
 # v = y - c - Z*a -- missing observations
 function get_v!(v::AbstractArray{T}, y::AbstractMatrix{T}, c::AbstractArray{T}, z::AbstractArray{T}, a::AbstractArray{T}, t::U, pattern::Vector{U}) where {T <: AbstractFloat, U <: Integer}
-    v .= view(y, pattern, t) .- view(c, pattern)
+    v .= view(y, pattern, t) .-  view(c, pattern)
     gemm!('N', 'N', -1.0, z, a, 1.0, v)
 end
 
@@ -199,10 +246,25 @@ function get_M!(y::AbstractArray{T}, x::AbstractArray{T}, work::AbstractArray{T}
 end
 
 # V_t = P_t - P_t*N_{t-1}*P_t
-function get_V!(V::AbstractArray{T}, P::AbstractArray{T}, N::AbstractArray{T}, Ptmp::AbstractArray{T}) where T <: AbstractFloat
+function get_Valpha!(V::AbstractArray{T}, P::AbstractArray{T}, N::AbstractArray{T}, Ptmp::AbstractArray{T}) where T <: AbstractFloat
     copy!(V, P)
     mul!(Ptmp, P, N)
     gemm!('N', 'N', -1.0, Ptmp, P, 1.0, V)
+end
+
+# Vepsilon_t = H - H*D_t*H
+function get_Vepsilon!(Vepsilon, H, D, tmp)
+    copy!(Vepsilon, H)
+    mul!(tmp, H, D)
+    mul!(Vepsilon, tmp, H, -1.0, 1.0)
+end
+
+# Veta_t = Q - Q*R'*N_t*R*Q
+function get_Veta!(Veta, Q, R, N, RQ, tmp)
+    copy!(Veta,  Q)
+    mul!(RQ, R, Q)
+    mul!(tmp, N, RQ)
+    mul!(Veta, RQ', tmp, -1.0, 1.0)
 end
 
 # a = T(a + K'*v)
@@ -245,6 +307,7 @@ end
 
 # N_{t-1} = Z_t'iF_t*Z_t + L_t'N_t*L_t
 function update_N!(N1::AbstractArray{T}, Z::AbstractArray{T}, iFZ::AbstractArray{T}, L::AbstractArray{T}, N::AbstractArray{T}, Ptmp::AbstractArray{T}) where T <: AbstractFloat
+    copy!(N, N1)
     mul!(N1, transpose(Z), iFZ)
     mul!(Ptmp, transpose(L), N)
     gemm!('N', 'N', 1.0, Ptmp, L, 1.0, N1)
@@ -260,7 +323,7 @@ end
 
 # P = T*(P - K'*Z*P)*T'+ QQ
 function update_P!(P::AbstractArray{U}, T::AbstractArray{U}, QQ::AbstractArray{U}, K::AbstractArray{U}, ZP::AbstractArray{U}, Ptmp::AbstractArray{U}) where U <: AbstractFloat
-    gemm!('T', 'N', -1.0, K, ZP, 1.0, P) 
+    gemm!('T', 'N', -1.0, K, ZP, 1.0, P)
     mul!(Ptmp, T, P)
     copy!(P, QQ)
     gemm!('N', 'T', 1.0, Ptmp, T, 1.0, P)
