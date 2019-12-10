@@ -946,7 +946,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     r1::Vector{T}
     a1::Vector{T}
     K::Array{T}
-    L::Array{T}
+    L::Matrix{T}
     L1::Matrix{T}
     N::Matrix{T}
     N1::Matrix{T}
@@ -978,7 +978,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
         r1 = Vector{T}(undef, ns)
         a1 = Vector{T}(undef, ns)
         K = Array{T}(undef, ny, ns, nobs)
-        L = Array{T}(undef, ns, ns, nobs)
+        L = Matrix{T}(undef, ns, ns)
         L1 = Matrix{T}(undef, ns, ns)
         N = Matrix{T}(undef, ns, ns)
         N1 = Matrix{T}(undef, ns, ns)
@@ -1160,12 +1160,11 @@ function kalman_smoother!(Y::AbstractArray{U},
         viFv = view(ws.iFv, 1:ndata, t)
         vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
         vK = view(ws.K, 1:ndata, :, t)
-        vL = view(ws.L, :, :, t)
         
         # L = T(I - K'*Z)
-        get_L!(vL, vT, vK, Z, ws.L1)
+        get_L!(ws.L, vT, vK, Z, ws.L1)
         # r_{t-1} = Z_t'*iF_t*v_t + L_t'r_t
-        update_r!(ws.r, vZ, viFv, vL, ws.r1)
+        update_r!(ws.r, vZ, viFv, ws.L, ws.r1)
         if length(epsilonh) > 0
             vepsilonh = view(epsilonh, :, t)
             # epsilon_h = H*(iF_t*v_t - K_t*T*r_t)
@@ -1194,7 +1193,7 @@ function kalman_smoother!(Y::AbstractArray{U},
             lengthe(etah) > 0)
             # N_{t-1} = Z_t'iF_t*Z_t + L_t'N_t*L_t
             get_iFZ!(ws.iFZ, vcholF, vZ)
-            update_N!(ws.N, vZ, ws.iFZ, vL, ws.N1, ws.PTmp)
+            update_N!(ws.N, vZ, ws.iFZ, ws.L, ws.N1, ws.PTmp)
         end
         if length(alphah) > 0
             valphah = view(alphah, :, t)
