@@ -6,17 +6,6 @@ function det_from_cholesky(achol::AbstractMatrix{T}) where T <: AbstractFloat
     x*x
 end
 
-function det_from_cholesky(achol::AbstractMatrix{T}, tol::T) where T <: AbstractFloat
-    x = 1.0
-    @inbounds @simd for i = 1:size(achol,1)
-        a = abs(achol[i,i])
-        if a > tol
-            x *= achol[i,i]
-        end
-    end
-    x*x
-end
-
 # alphah_t = a_t + P_t*r_{t-1}
 function get_alphah!(alphah::AbstractVector{T}, a::AbstractVector{T}, P::AbstractArray{T}, r::AbstractVector{T}) where T <: AbstractFloat
     alphah .= a
@@ -25,14 +14,15 @@ end
 
 function get_cholF!(cholF::AbstractArray{T}, F::AbstractArray{T}) where T <: AbstractFloat
     cholF .= 0.5.*(F .+ transpose(F))
-    LAPACK.potrf!('U', cholF)
+    info = LAPACK.potrf!('U', cholF)
+    return info[2]
 end
 
-# D = inv(F_t) + K_t*T*N_t*T'*K'
+# D = inv(F_t) + K_t*T*N_t*T'*K_t'
 function get_D!(D, cholF, K, T, N, KT, tmp)
     copy!(D, cholF)
     LAPACK.potri!('U', D)
-    # complete lower trianle and change sign of entire matrix
+    # complete lower triangle
     n = size(D,1)
     @inbounds for i = 1:n
         @simd for j = i:n
@@ -64,6 +54,12 @@ function get_etah!(etah::AbstractVector{T}, Q::AbstractMatrix{T},
     mul!(etah, Q, tmp)
 end
 
+function get_F(Zi, P, h, tmp)
+    mul!(tmp, P, Zi)
+    F = dot(Zi, tmp) + h
+    return F
+end
+
 function get_F!(f::AbstractArray{T}, zp::AbstractArray{T}, z::AbstractArray{T}, p::AbstractArray{T}) where T <: AbstractFloat
     mul!(zp, z, p)
     mul!(f, zp, transpose(z))
@@ -74,14 +70,18 @@ function get_F!(f::AbstractArray{T}, zp::AbstractArray{T}, z::AbstractVector{U},
     f .= view(zp, :, z)
 end
 
-function get_Fstar!(z::AbstractVector{T}, p::AbstractArray{T}, h::T, ukstar::AbstractVector{T}) where T <: AbstractFloat
-    mul!(ukstar, p, z)
-    Fstar = BLAS.dot(z, ukstar) + h                 # F_{*,t} in 5.7 in DK (2012), relies on H being diagonal
+# F = Z*P*Z' + H
+function get_F!(f::AbstractArray{T}, zp::AbstractArray{T}, z::AbstractArray{T}, p::AbstractArray{T}, h::AbstractArray{T}) where T <: AbstractFloat
+    copy!(f, h)
+    mul!(zp, z, p)
+    gemm!('N', 'T', 1.0, zp, z, 1.0, f)
 end
 
-function get_Fstar!(z::U, p::AbstractArray{T}, h::T, ukstar::AbstractVector{T}) where {T <: AbstractFloat, U <: Integer}
-    ukstar .= view(p, :, z)
-    Fstar = BLAS.dot(z, ukstar) + h                 # F_{*,t} in 5.7 in DK (2012), relies on H being diagonal
+# F = P(z,z) + H
+function get_F!(f::AbstractArray{T}, zp::AbstractArray{T}, z::AbstractVector{I}, p::AbstractArray{T}, h::AbstractArray{T}) where {I <: Integer, T <: AbstractFloat}
+    copy!(f, h)
+    zp .= view(p, z, :)
+    f .+= view(zp, :, z)
 end
 
 function get_Finf!(z::AbstractVector{T}, p::AbstractArray{T}, ukinf::AbstractVector{T}) where T <: AbstractFloat
@@ -94,14 +94,35 @@ function get_Finf!(z::U, p::AbstractArray{T}, ukinf::AbstractVector{T}) where {T
     Finf  = BLAS.dot(z, ukinf)                         # F_{\infty,t} in 5.7 in DK (2012), relies on H being diagonal
 end
 
+function get_Fstar!(z::AbstractVector{T}, p::AbstractArray{T}, h::T, ukstar::AbstractVector{T}) where T <: AbstractFloat
+    mul!(ukstar, p, z)
+    Fstar = BLAS.dot(z, ukstar) + h                 # F_{*,t} in 5.7 in DK (2012), relies on H being diagonal
+end
+
+function get_Fstar!(z::U, p::AbstractArray{T}, h::T, ukstar::AbstractVector{T}) where {T <: AbstractFloat, U <: Integer}
+    ukstar .= view(p, :, z)
+    Fstar = BLAS.dot(z, ukstar) + h                 # F_{*,t} in 5.7 in DK (2012), relies on H being diagonal
+end
+
 function get_iF!(iF::AbstractArray{T}, cholF::AbstractArray{T}) where T <: AbstractFloat
     copy!(iFZ, Z)
     LAPACK.potri!('U', cholF)
 end
 
+function get_iFv!(iFv::AbstractVector{T}, cholF::AbstractArray{T}, v::AbstractVector{T}) where T <: AbstractFloat
+    iFv .= v
+    LAPACK.potrs!('U', cholF, iFv)
+end
+
 function get_iFZ!(iFZ::AbstractArray{T}, cholF::AbstractArray{T}, Z::AbstractArray{T}) where T <: AbstractFloat
     copy!(iFZ, Z)
     LAPACK.potrs!('U', cholF, iFZ)
+end
+
+# K = iF*Z*P
+function get_K!(K::AbstractArray{T}, ZP::AbstractArray{T}, cholF::AbstractArray{T}) where T <: AbstractFloat
+    copy!(K, ZP)
+    LAPACK.potrs!('U', cholF, K)
 end
 
 function get_Kstar!(Kstar::AbstractArray{T}, Z::AbstractArray{T}, Pstar::AbstractArray{T}, Fstar::AbstractArray{T}, K::AbstractArray{T}, cholF::AbstractArray{T}) where T <: AbstractFloat
@@ -142,94 +163,6 @@ function get_L!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, z
     mul!(L, T, L1)
 end
 
-function get_iFv!(iFv::AbstractVector{T}, cholF::AbstractArray{T}, v::AbstractVector{T}) where T <: AbstractFloat
-    iFv .= v
-    LAPACK.potrs!('U', cholF, iFv)
-end
-
-# K = iF*Z*P
-function get_K!(K::AbstractArray{T}, ZP::AbstractArray{T}, cholF::AbstractArray{T}) where T <: AbstractFloat
-    copy!(K, ZP)
-    LAPACK.potrs!('U', cholF, K)
-end
-
-function get_QQ!(c::AbstractMatrix{T}, a::AbstractMatrix{T}, b::AbstractMatrix{T}, work::Matrix{T}) where T <: AbstractFloat
-    mul!(work, a, b)
-    mul!(c, work, transpose(a))
-end
-
-function get_prediction_error(Y::AbstractArray{T}, Z::AbstractArray{T}, a::AbstractVector{T}, i::U, t::U) where {T <: AbstractFloat, U <: Integer}
-        Zi = view(Z, i, :)
-        prediction_error = Y[i, t] - BLAS.dot(Zi, a)          # nu_{t,i} in 6.13 in DK (2012)
-end
-
-function get_prediction_error(Y::AbstractArray{T}, z::AbstractVector{U}, a::AbstractVector{T}, i::U, t::U) where {T <: AbstractFloat, U <: Integer}
-        prediction_error = Y[i, t] - a[z[i]]                  # nu_{t,i} in 6.13 in DK (2012)
-end
-
-# v = y - c - Z*a -- basic
-function get_v!(v::AbstractArray{T}, y::AbstractMatrix{T}, c::AbstractArray{T}, z::AbstractArray{T}, a::AbstractArray{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
-    copyto!(v, 1, y, iy, ny)
-    v .-= c
-    gemm!('N', 'N', -1.0, z, a, 1.0, v)
-end
-
-# v = y - c - a[z] -- Z selection matrix
-function get_v!(v::AbstractArray{T}, y::AbstractMatrix{T}, c::AbstractArray{T}, z::AbstractVector{U}, a::AbstractArray{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
-    copyto!(v, 1, y, iy, ny)
-    az = view(a,z)
-    v .-= c .+ az
-end
-
-# v = y - c - Z*a -- missing observations
-function get_v!(v::AbstractArray{T}, y::AbstractMatrix{T}, c::AbstractArray{T}, z::AbstractArray{T}, a::AbstractArray{T}, t::U, pattern::Vector{U}) where {T <: AbstractFloat, U <: Integer}
-    v .= view(y, pattern, t) .-  view(c, pattern)
-    gemm!('N', 'N', -1.0, z, a, 1.0, v)
-end
-
-# v = y - c - a[z] -- Z selection matrix and missing variables
-function get_v!(v::AbstractArray{T}, y::AbstractMatrix{T}, c::AbstractArray{T}, z::AbstractVector{U}, a::AbstractArray{T}, t::U, pattern::Vector{Int64}) where {T <: AbstractFloat, U <: Integer}
-    v .= view(y, pattern, t) .- view(c, pattern) .- view(a, z)
-end
-
-# v = y - Z*a -- basic
-function get_v!(v::AbstractVector{T}, y::AbstractMatrix{T}, z::AbstractMatrix{T}, a::AbstractVector{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
-    copyto!(v, 1, y, iy, ny)
-    gemv!('N', -1.0, z, a, 1.0, v)
-end
-
-# v = y - a[z] -- Z selection matrix
-function get_v!(v::AbstractVector{T}, y::AbstractMatrix{T}, z::AbstractVector{U}, a::AbstractVector{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
-    copyto!(v, 1, y, iy, ny)
-    az = view(a,z)
-    v .= v .- az
-end
-
-# v = y - Z*a -- missing observations
-function get_v!(v::AbstractVector{T}, y::AbstractMatrix{T}, z::AbstractMatrix{T}, a::AbstractVector{T}, t::U, pattern::Vector{U}) where {T <: AbstractFloat, U <: Integer}
-    v .= view(y, pattern, t)
-    gemv!('N', -1.0, z, a, 1.0, v)
-end
-
-# v = y - a[z] -- Z selection matrix and missing variables
-function get_v!(v::AbstractVector{T}, y::AbstractMatrix{T}, z::AbstractVector{U}, a::AbstractVector{T}, t::U, pattern::Vector{Int64}) where {T <: AbstractFloat, U <: Integer}
-    v .= view(y, pattern, t) .- view(a, z)
-end
-
-# F = Z*P*Z' + H
-function get_F!(f::AbstractArray{T}, zp::AbstractArray{T}, z::AbstractArray{T}, p::AbstractArray{T}, h::AbstractArray{T}) where T <: AbstractFloat
-    copy!(f, h)
-    mul!(zp, z, p)
-    gemm!('N', 'T', 1.0, zp, z, 1.0, f)
-end
-
-# F = P(z,z) + H
-function get_F!(f::AbstractArray{T}, zp::AbstractArray{T}, z::AbstractVector{I}, p::AbstractArray{T}, h::AbstractArray{T}) where {I <: Integer, T <: AbstractFloat}
-    copy!(f, h)
-    zp .= view(p, z, :)
-    f .+= view(zp, :, z)
-end
-
 function get_M!(y::AbstractArray{T}, x::AbstractArray{T}, work::AbstractArray{T}) where T <: AbstractFloat
     copy!(work, x)
     LAPACK.potri!('U', work)
@@ -243,6 +176,78 @@ function get_M!(y::AbstractArray{T}, x::AbstractArray{T}, work::AbstractArray{T}
             y[j, i] = -work[i, j]
         end
     end
+end
+
+function get_prediction_error(Y::AbstractArray{T}, Z::AbstractArray{T}, a::AbstractVector{T}, i::U, t::U) where {T <: AbstractFloat, U <: Integer}
+        Zi = view(Z, i, :)
+        prediction_error = Y[i, t] - BLAS.dot(Zi, a)          # nu_{t,i} in 6.13 in DK (2012)
+end
+
+function get_prediction_error(Y::AbstractArray{T}, z::AbstractVector{U}, a::AbstractVector{T}, i::U, t::U) where {T <: AbstractFloat, U <: Integer}
+        prediction_error = Y[i, t] - a[z[i]]                  # nu_{t,i} in 6.13 in DK (2012)
+end
+
+function get_QQ!(c::AbstractMatrix{T}, a::AbstractMatrix{T}, b::AbstractMatrix{T}, work::Matrix{T}) where T <: AbstractFloat
+    mul!(work, a, b)
+    mul!(c, work, transpose(a))
+end
+
+# v = y - Z*a -- basic
+function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{T}, z::AbstractVecOrMat{T}, a::AbstractVector{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+    copyto!(v, 1, y, iy, ny)
+    gemv!('N', -1.0, z, a, 1.0, v)
+end
+
+# v = y - Z*a -- basic -- univariate
+function get_v!(Y::AbstractVecOrMat{T}, Z::AbstractVecOrMat{T}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
+    v = Y[i]
+    for j = 1:length(a)
+        v -= Z[i, j]*a[j]
+    end
+    return v
+end
+
+# v = y - a[z] -- Z selection matrix
+function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{T}, z::AbstractVector{U}, a::AbstractVector{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+    copyto!(v, 1, y, iy, ny)
+    az = view(a,z)
+    v .= v .- az
+end
+
+# v = y - Z*a -- missing observations
+function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{T}, z::AbstractMatrix{T}, a::AbstractVector{T}, t::U, pattern::Vector{U}) where {T <: AbstractFloat, U <: Integer}
+    v .= view(y, pattern, t)
+    gemv!('N', -1.0, z, a, 1.0, v)
+end
+
+# v = y - a[z] -- Z selection matrix and missing variables
+function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{T}, z::AbstractVector{U}, a::AbstractVector{T}, t::U, pattern::Vector{Int64}) where {T <: AbstractFloat, U <: Integer}
+    v .= view(y, pattern, t) .- view(a, z)
+end
+
+# v = y - c - Z*a -- basic
+function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{T}, c::AbstractArray{T}, z::AbstractArray{T}, a::AbstractArray{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+    copyto!(v, 1, y, iy, ny)
+    v .-= c
+    gemm!('N', 'N', -1.0, z, a, 1.0, v)
+end
+
+# v = y - c - a[z] -- Z selection matrix
+function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{T}, c::AbstractArray{T}, z::AbstractVector{U}, a::AbstractArray{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+    copyto!(v, 1, y, iy, ny)
+    az = view(a,z)
+    v .-= c .+ az
+end
+
+# v = y - c - Z*a -- missing observations
+function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{T}, c::AbstractArray{T}, z::AbstractArray{T}, a::AbstractArray{T}, t::U, pattern::Vector{U}) where {T <: AbstractFloat, U <: Integer}
+    v .= view(y, pattern, t) .-  view(c, pattern)
+    gemm!('N', 'N', -1.0, z, a, 1.0, v)
+end
+
+# v = y - c - a[z] -- Z selection matrix and missing variables
+function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{T}, c::AbstractArray{T}, z::AbstractVector{U}, a::AbstractArray{T}, t::U, pattern::Vector{Int64}) where {T <: AbstractFloat, U <: Integer}
+    v .= view(y, pattern, t) .- view(c, pattern) .- view(a, z)
 end
 
 # V_t = P_t - P_t*N_{t-1}*P_t
