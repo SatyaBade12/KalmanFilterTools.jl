@@ -1,6 +1,18 @@
+@doc raw"""
+Module KalmanFilterTools provides algorithms for computing the
+Kalman filter, the Kalman smoother and the log-likelihood of a state
+space model using the Kalman filter.
+
+The state space is given by
+```
+    y_t = Z_t α_t + ϵ_t
+    α_{t+1} = T α_t + Rη_t
+```
+"""
 module KalmanFilterTools
 
 include("kalman_base.jl")
+include("univariate_step.jl")
 
 """
 State space specification:
@@ -27,6 +39,8 @@ struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     v::Vector{T}
     F::Matrix{T}
     cholF::Matrix{T}
+    cholH::Matrix{T}
+    LTcholH::Matrix{T}
     iFv::Vector{T}
     a1::Vector{T}
     K::Matrix{T}
@@ -35,6 +49,12 @@ struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     PTmp::Matrix{T}
     oldP::Matrix{T}
     lik::Vector{T}
+    cholHset::Bool
+    ystar::Vector{T}
+    Zstar::Matrix{T}
+    tmp_ns::Vector{T}
+    PZi::Vector{T}
+    kalman_tol::T
     
     function KalmanLikelihoodWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
         Zsmall = Matrix{T}(undef, ny, ns)
@@ -43,6 +63,8 @@ struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         QQ = Matrix{T}(undef, ns, ns)
         F = Matrix{T}(undef, ny, ny)
         cholF = Matrix{T}(undef, ny, ny)
+        cholH = Matrix{T}(undef, ny, ny)
+        LTcholH = Matrix{T}(undef, ny, ny)
         v = Vector{T}(undef, ny)
         iFv = Vector{T}(undef, ny)
         a1 = Vector{T}(undef, ns)
@@ -52,7 +74,16 @@ struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         ZP = Matrix{T}(undef, ny, ns)
         iFZ = view(PTmp,1:ny,:)
         lik = Vector{T}(undef, nobs)
-        new(Zsmall, iZsmall, RQ, QQ, v, F, cholF, iFv, a1, K, ZP, iFZ, PTmp, oldP, lik)
+        cholHset = false
+        ystar = Vector{T}(undef, ny)
+        Zstar = Matrix{T}(undef, ny, ns)
+        tmp_ns = Vector{T}(undef, ns)
+        PZi = Vector{T}(undef, ns)
+        kalman_tol = 1e-12
+        
+        new(Zsmall, iZsmall, RQ, QQ, v, F, cholF, cholH, LTcholH,
+            iFv, a1, K, ZP, iFZ, PTmp, oldP, lik, cholHset, ystar,
+            Zstar, tmp_ns, PZi, kalman_tol)
     end
 end
 
@@ -69,11 +100,13 @@ function kalman_likelihood(Y::AbstractArray{U},
                            last::V,
                            presample::V,
                            ws::KalmanWs) where {U <: AbstractFloat, W <: Real, V <: Integer}
-    ny, nobs = size(Y)
+    ny = size(Y,1)
+    nobs = size(Y,2)
     # QQ = R*Q*R'
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     lik_cst = (nobs - presample)*ny*log(2*pi)
     fill!(ws.lik, 0.0)
+    cholHset = false
     t = start
     iy = 1
     @inbounds while t <= last
@@ -82,11 +115,18 @@ function kalman_likelihood(Y::AbstractArray{U},
         iy += ny
         # F  = Z*P*Z' + H
         get_F!(ws.F, ws.ZP, Z, P, H)
-        get_cholF!(ws.cholF, ws.F)
-        # iFv = inv(F)*v
-        get_iFv!(ws.iFv, ws.cholF, ws.v)
-        ws.lik[t] = log(det_from_cholesky(ws.cholF)) + LinearAlgebra.dot(ws.v, ws.iFv)
-        if t < last
+        info = get_cholF!(ws.cholF, ws.F)
+        if info != 0
+            # F is near singular
+            if !cholHset
+                get_cholF!(ws.cholH, H)
+                cholHset = true
+            end
+            ws.lik[t] = univariate_step!(t, Y, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+        else
+            # iFv = inv(F)*v
+            get_iFv!(ws.iFv, ws.cholF, ws.v)
+            ws.lik[t] = log(det_from_cholesky(ws.cholF)) + LinearAlgebra.dot(ws.v, ws.iFv)
             # K = iF*Z*P
             get_K!(ws.K, ws.ZP, ws.cholF) 
             # a = T(a + K'*v)
@@ -137,7 +177,8 @@ function kalman_likelihood(Y::AbstractArray{U},
                            presample::V,
                            ws::KalmanWs,
                            data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer}
-    ny, nobs = size(Y)
+    ny = size(Y,1)
+    nobs = size(Y,2)
     # QQ = R*Q*R'
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     l2pi = log(2*pi)
@@ -162,11 +203,19 @@ function kalman_likelihood(Y::AbstractArray{U},
         iy += ny
         # F  = Z*P*Z' + H
         get_F!(vF, vZP, vZsmall, P, vH)
-        get_cholF!(vcholF, vF)
-        # iFv = inv(F)*v
-        get_iFv!(viFv, vcholF, vv)
-        ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF)) + LinearAlgebra.dot(vv, viFv)
-        if t < last
+        info = get_cholF!(vcholF, vF)
+        if info != 0
+            @show info
+            # F is near singular
+            if !cholHset
+                get_cholF!(vcholH, vH)
+                cholHset = true
+            end
+            ws.lik[t] = univariate_step!(t, Y, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+        else
+            # iFv = inv(F)*v
+            get_iFv!(viFv, vcholF, vv)
+            ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF)) + LinearAlgebra.dot(vv, viFv)
             # K = iF*Z*P
             get_K!(vK, vZP, vcholF) 
             # a = T(a + K'*v)
@@ -196,7 +245,8 @@ function kalman_likelihood_monitored(Y::Matrix{U},
                                      last::V,
                                      presample::V,
                                      ws::KalmanWs) where {U <: AbstractFloat, V <: Integer, W <: Real}
-    ny, nobs = size(Y)
+    ny = size(Y,1)
+    nobs = size(Y,2)
     ns = size(T,1)
     # QQ = R*Q*R'
     get_QQ!(ws.QQ, R, Q, ws.RQ)
@@ -213,27 +263,35 @@ function kalman_likelihood_monitored(Y::Matrix{U},
         if !steady
             # F  = Z*P*Z' + H
             get_F!(ws.F, ws.ZP, Z, P, H)
-            get_cholF!(ws.cholF, ws.F)
+            info = get_cholF!(ws.cholF, ws.F)
+            if info != 0
+                @show info
+                # F is near singular
+                if !cholHset
+                    get_cholF!(ws.cholH, H)
+                    cholHset = true
+                end
+                ws.lik[t] = univariate_step!(t, Y, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+                continue
+            end
         end
         # iFv = inv(F)*v
         get_iFv!(ws.iFv, ws.cholF, ws.v)
         ws.lik[t] = log(det_from_cholesky(ws.cholF)) + LinearAlgebra.dot(ws.v, ws.iFv)
-        if t < last
-            if !steady
-                # K = iF*Z*P
-                get_K!(ws.K, ws.ZP, ws.cholF)
-            end
-            # a = T(a + K'*v)
-            update_a!(a, ws.K, ws.v, ws.a1, T)
-            if !steady
-                # P = T*(P - K'*Z*P)*T'+ QQ
-                update_P!(P, T, ws.QQ, ws.K, ws.ZP, ws.PTmp)
-                ws.oldP .-= P
-                if norm(ws.oldP) < ns*eps()
-                    steady = true
-                else
-                    copy!(ws.oldP, P)
-                end
+        if !steady
+            # K = iF*Z*P
+            get_K!(ws.K, ws.ZP, ws.cholF)
+        end
+        # a = T(a + K'*v)
+        update_a!(a, ws.K, ws.v, ws.a1, T)
+        if !steady
+            # P = T*(P - K'*Z*P)*T'+ QQ
+            update_P!(P, T, ws.QQ, ws.K, ws.ZP, ws.PTmp)
+            ws.oldP .-= P
+            if norm(ws.oldP) < ns*eps()
+                steady = true
+            else
+                copy!(ws.oldP, P)
             end
         end
         t += 1
@@ -259,7 +317,8 @@ function kalman_likelihood_monitored(Y::AbstractArray{U},
                                      presample::V,
                                      ws::KalmanWs,
                                      data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer}
-    ny, nobs = size(Y)
+    ny = size(Y,1)
+    nobs = size(Y,2)
     ns = size(T,1)
     # QQ = R*Q*R'
     get_QQ!(ws.QQ, R, Q, ws.RQ)
@@ -286,27 +345,36 @@ function kalman_likelihood_monitored(Y::AbstractArray{U},
         if !steady
             # F  = Z*P*Z' + H
             get_F!(vF, vZP, Z, P, vH)
-            get_cholF!(vcholF, vF)
+            info = get_cholF!(ws.cholF, ws.F)
+            if info != 0
+                @show info
+                # F is near singular
+                if !cholHset
+                    get_cholF!(ws.cholH, H)
+                    cholHset = true
+                end
+                ws.lik[t] = univariate_step!(t, Y, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+                t += 1
+                continue
+            end
         end
         # iFv = inv(F)*v
         get_iFv!(viFv, vcholF, vv)
         ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF)) + LinearAlgebra.dot(vv, viFv)
-        if t < last
-            if !steady
-                # K = iF*Z*P
-                get_K!(vK, vZP, vcholF)
-            end
-            # a = T(a + K'*v)
-            update_a!(a, vK, vv, ws.a1, T)
-            if !steady
-                # P = T*(P - K'*Z*P)*T'+ QQ
-                update_P!(P, T, ws.QQ, vK, vZP, ws.PTmp)
-                ws.oldP .-= P
-                if norm(ws.oldP) < ns*eps()
-                    steady = true
-                else
-                    copy!(ws.oldP, P)
-                end
+        if !steady
+            # K = iF*Z*P
+            get_K!(vK, vZP, vcholF)
+        end
+        # a = T(a + K'*v)
+        update_a!(a, vK, vv, ws.a1, T)
+        if !steady
+            # P = T*(P - K'*Z*P)*T'+ QQ
+            update_P!(P, T, ws.QQ, vK, vZP, ws.PTmp)
+            ws.oldP .-= P
+            if norm(ws.oldP) < ns*eps()
+                steady = true
+            else
+                copy!(ws.oldP, P)
             end
         end
         t += 1
@@ -368,7 +436,6 @@ struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
 end
 
 """
-from kalman_filter_2
 K doesn't represent the same matrix as above
 """
 function fast_kalman_likelihood(Y::Matrix{U},
@@ -383,7 +450,8 @@ function fast_kalman_likelihood(Y::Matrix{U},
                                 last::V,
                                 presample::V,
                                 ws::KalmanWs) where {U <: AbstractFloat, V <: Integer, W <: Real}
-    ny, nobs = size(Y)
+    ny = size(Y,1)
+    nobs = size(Y,2)
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     lik_cst = (nobs - presample)*ny*log(2*pi)
     fill!(ws.lik, 0.0)
@@ -406,20 +474,18 @@ function fast_kalman_likelihood(Y::Matrix{U},
         # iFv = inv(F)*v
         get_iFv!(ws.iFv, ws.cholF, ws.v)
         ws.lik[t] = log(det_from_cholesky(ws.cholF)) + LinearAlgebra.dot(ws.v, ws.iFv)
-        if t < last
-            # a = T(a + K'*iFv)
-            update_a!(a, ws.K, ws.iFv, ws.a1, T)
-            # M = M + M*W'*Z'iF*Z*W*M
-            update_M!(ws.M, Z, ws.W, ws.cholF, ws.ZW, ws.ZWM, ws.iFZWM)
-            # F =  F + Z*W*M*W'Z'
-            gemm!('N', 'T', 1.0, ws.ZWM, ws.ZW, 1.0, ws.F)
-            # cholF
-            get_cholF!(ws.cholF, ws.F)
-            # K = K + W*M*W'*Z'
-            update_K!(ws.K, ws.ZWM, ws.W)
-            # W = T(W - K'*iF*Z*W)
-            update_W!(ws.W, ws.ZW, ws.cholF, T, ws.K, ws.iFZW, ws.KtiFZW)
-        end
+        # a = T(a + K'*iFv)
+        update_a!(a, ws.K, ws.iFv, ws.a1, T)
+        # M = M + M*W'*Z'iF*Z*W*M
+        update_M!(ws.M, Z, ws.W, ws.cholF, ws.ZW, ws.ZWM, ws.iFZWM)
+        # F =  F + Z*W*M*W'Z'
+        gemm!('N', 'T', 1.0, ws.ZWM, ws.ZW, 1.0, ws.F)
+        # cholF
+        get_cholF!(ws.cholF, ws.F)
+        # K = K + W*M*W'*Z'
+        update_K!(ws.K, ws.ZWM, ws.W)
+        # W = T(W - K'*iF*Z*W)
+        update_W!(ws.W, ws.ZW, ws.cholF, T, ws.K, ws.iFZW, ws.KtiFZW)
         t += 1
     end
     @inbounds if presample > 0
@@ -443,7 +509,8 @@ function fast_kalman_likelihood(Y::Matrix{U},
                                 presample::V,
                                 ws::KalmanWs,
                                 data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, V <: Integer, W <: Real}
-    ny, nobs = size(Y)
+    ny = size(Y,1)
+    nobs = size(Y,2)
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     l2pi = log(2*pi)
     fill!(ws.lik, 0.0)
@@ -481,20 +548,18 @@ function fast_kalman_likelihood(Y::Matrix{U},
         # iFv = inv(F)*v
         get_iFv!(viFv, vcholF, vv)
         ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF)) + LinearAlgebra.dot(vv, viFv)
-        if t < last
-            # a = T(a + K'*iFv)
-            update_a!(a, vK, viFv, ws.a1, T)
-            # M = M + M*W'*Z'iF*Z*W*M
-            update_M!(ws.M, Z, vW, vcholF, vZW, vZWM, viFZWM)
-            # F =  F + Z*W*M*W'Z'
-            gemm!('N', 'T', 1.0, vZWM, vZW, 1.0, vF)
-            # cholF
-            get_cholF!(vcholF, vF)
-            # K = K + W*M*W'*Z'
-            update_K!(vK, vZWM, vW)
-            # W = T(W - K'*iF*Z*W)
-            update_W!(vW, vZW, vcholF, T, vK, viFZW, vKtiFZW)
-        end
+        # a = T(a + K'*iFv)
+        update_a!(a, vK, viFv, ws.a1, T)
+        # M = M + M*W'*Z'iF*Z*W*M
+        update_M!(ws.M, Z, vW, vcholF, vZW, vZWM, viFZWM)
+        # F =  F + Z*W*M*W'Z'
+        gemm!('N', 'T', 1.0, vZWM, vZW, 1.0, vF)
+        # cholF
+        get_cholF!(vcholF, vF)
+        # K = K + W*M*W'*Z'
+        update_K!(vK, vZWM, vW)
+        # W = T(W - K'*iF*Z*W)
+        update_W!(vW, vZW, vcholF, T, vK, viFZW, vKtiFZW)
         t += 1
     end
     @inbounds if presample > 0
@@ -581,7 +646,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
         # Finf = Z*Pinf*Z'
         get_F!(ws.F, ws.ZP, Z, Pinf)
         info = get_cholF!(ws.cholF, ws.F)
-        if info[2] > 0
+        if info > 0
             if norm(ws.F) < tol
                 return t - 1
             else
@@ -659,7 +724,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
         # Finf = Z*Pinf*Z'
         get_F!(vF, vZP, vZsmall, Pinf)
         info = get_cholF!(vcholF, vF)
-        if info[2] > 0
+        if info > 0
             if norm(vF) < tol
                 return t - 1
             else
@@ -710,7 +775,8 @@ function diffuse_kalman_likelihood(Y::Matrix{U},
                                    ws::DiffuseKalmanLikelihoodWs) where {U <: AbstractFloat,
                                                                          V <: Integer,
                                                                          W <: Real}
-    ny, nobs = size(Y)
+    ny = size(Y,1)
+    nobs = size(Y,2)
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     lik_cst = (nobs - presample)*ny*log(2*pi)
     fill!(ws.lik, 0.0)
@@ -741,7 +807,8 @@ function diffuse_kalman_likelihood(Y::Matrix{U},
                                    data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat,
                                                                          V <: Integer,
                                                                          W <: Real}
-    ny, nobs = size(Y)
+    ny = size(Y,1)
+    nobs = size(Y,2)
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     lik_cst = (nobs - presample)*ny*log(2*pi)
     fill!(ws.lik, 0.0)
@@ -755,7 +822,7 @@ function diffuse_kalman_likelihood(Y::Matrix{U},
     LIK
 end
 
-
+#=
 function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws)
     llik = 0
     for i=1:size(Y, 1)
@@ -825,6 +892,7 @@ function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, 
     end
     return llik
 end
+=#
 
 # Filters
 
@@ -853,7 +921,8 @@ function kalman_filter!(Y::AbstractArray{U},
     changeA = ndims(a) > 1
     changeP = ndims(P) > 2
     
-    ny, nobs = size(Y)
+    ny = size(Y, 1)
+    nobs = size(Y, 2)
     ns = size(T,1)
     # QQ = R*Q*R'
     vR = view(R, :, :, 1)
@@ -875,8 +944,8 @@ function kalman_filter!(Y::AbstractArray{U},
         vH = changeH ? view(H, :, :, t) : view(H, :, :)
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
         vR = changeR ? view(R, :, :, t) : view(R, :, :)
-        vQ = changeR ? view(Q, :, :, t) : view(Q, :, :)
-        va = changeR ? view(a, :, t) : view(a, :)
+        vQ = changeQ ? view(Q, :, :, t) : view(Q, :, :)
+        va = changeA ? view(a, :, t) : view(a, :)
         va1 = changeA ? view(a, :, t + 1) : view(a, :)
         vd = changeD ? view(d, :, t) : view(d, :)
         vP = changeP ? view(P, :, :, t) : view(P, :, :)
@@ -886,6 +955,7 @@ function kalman_filter!(Y::AbstractArray{U},
         end
         vv = view(ws.v, 1:ndata)
         vF = view(ws.F, 1:ndata, 1:ndata)
+        vvH = view(vH, pattern, pattern)
         vZP = view(ws.ZP, 1:ndata, :)
         vcholF = view(ws.cholF, 1:ndata, 1:ndata, 1)
         viFv = view(ws.iFv, 1:ndata)
@@ -896,8 +966,19 @@ function kalman_filter!(Y::AbstractArray{U},
         iy += ny
         if !steady
             # F  = Z*P*Z' + H
-            get_F!(vF, vZP, vZ, vP, vH)
+            get_F!(vF, vZP, vZ, vP, vvH)
             get_cholF!(vcholF, vF)
+            info = get_cholF!(ws.cholF, ws.F)
+            if info != 0
+                @show info
+                # F is near singular
+                if !cholHset
+                    get_cholF!(ws.cholH, H)
+                    cholHset = true
+                end
+                ws.lik[t] = univariate_step!(t, Y, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+                t += 1
+                continue
         end
         # iFv = inv(F)*v
         get_iFv!(viFv, vcholF, vv)
@@ -1027,7 +1108,8 @@ function kalman_filter_2!(Y::AbstractArray{U},
     changeA = ndims(a) > 1
     changeP = ndims(P) > 2
     
-    ny, nobs = size(Y)
+    ny = size(Y,1)
+    nobs = size(Y,2)
     ns = size(T,1)
     # QQ = R*Q*R'
     vR = view(R, :, :, 1)
@@ -1071,7 +1153,18 @@ function kalman_filter_2!(Y::AbstractArray{U},
         if !steady
             # F  = Z*P*Z' + H
             get_F!(vF, vZP, vZ, vP, vH)
-            get_cholF!(vcholF, vF)
+            info = get_cholF!(ws.cholF, ws.F)
+            if info != 0
+                @show info
+                # F is near singular
+                if !cholHset
+                    get_cholF!(ws.cholH, H)
+                    cholHset = true
+                end
+                ws.lik[t] = univariate_step!(t, Y, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+                t += 1
+                continue
+            end
         end
         # iFv = inv(F)*v
         get_iFv!(viFv, vcholF, vv)
