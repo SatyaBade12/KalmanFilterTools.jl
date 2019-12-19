@@ -57,6 +57,82 @@ s = copy(s_0)
 
 end
 
+H_0 = copy(H)
+# Singular F matrix
+@testset "Singular F matrix diagonal H" begin
+    H = zeros(ny, ny) + I(ny)
+    
+    ws1 = KalmanLikelihoodWs(ny, ns, np, nobs)
+    P = zeros(ns, ns, nobs+1)
+    s = copy(s_0)
+
+    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    @test P[:, :, 2] ≈ R*Q*R'
+
+    P = zeros(ns, ns)
+    s = copy(s_0)
+    
+    llk_2 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
+    @test llk_2  ≈ llk_1
+
+    P = zeros(ns, ns)
+    s = copy(s_0)
+    
+    llk_3 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    @test llk_3  ≈ llk_1
+
+    P = zeros(ns, ns)
+    s = copy(s_0)
+    
+    llk_4 = kalman_likelihood_monitored(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
+    @test llk_4  ≈ llk_1
+
+    P = zeros(ns, ns)
+    s = copy(s_0)
+    
+    llk_5 = kalman_likelihood_monitored(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    @test llk_5  ≈ llk_1
+
+end
+
+@testset "Singular F matrix Full H" begin
+    H = randn(ny, ny)
+    H = H'*H
+    
+    ws1 = KalmanLikelihoodWs(ny, ns, np, nobs)
+    P = zeros(ns, ns, nobs+1)
+    s = copy(s_0)
+
+    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    @test P[:, :, 2] ≈ R*Q*R'
+
+    P = zeros(ns, ns)
+    s = copy(s_0)
+    
+    llk_2 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
+    @test llk_2  ≈ llk_1
+
+    P = zeros(ns, ns)
+    s = copy(s_0)
+    
+    llk_3 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    @test llk_3  ≈ llk_1
+
+    P = zeros(ns, ns)
+    s = copy(s_0)
+    
+    llk_4 = kalman_likelihood_monitored(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
+    @test llk_4  ≈ llk_1
+
+    P = zeros(ns, ns)
+    s = copy(s_0)
+    
+    llk_5 = kalman_likelihood_monitored(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    @test llk_5  ≈ llk_1
+
+end
+
+H = copy(H_0)    
 # Fast Kalman Filter
 @testset "Fast Kalman Filter" begin
     ws1 = KalmanLikelihoodWs{Float64, Integer}(ny, ns, np, nobs)
@@ -253,3 +329,4 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
 end
 
 nothing
+

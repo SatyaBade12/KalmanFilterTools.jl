@@ -64,12 +64,14 @@ tmp = zeros(np)
 KalmanFilterTools.get_etah!(eta, Q, R, r, tmp)
 @test eta ≈ Q*R'*r
 
+Z = randn(ny, ns)
 H = randn(ny, ny)
 H = H'*H
-F = zeros(ny, ny)
-ZP = zeros(ny, ns)
+F = randn(ny, ny)
+ZP = randn(ny, ns)
+P = randn(ns, ns)
 KalmanFilterTools.get_F!(F, ZP, Z, P, H)
-@test ZP == Z*P
+@test ZP ≈ Z*P
 @test F ≈ Z*P*Z' + H
 
 # Z as selection matrix

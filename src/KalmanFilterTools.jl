@@ -29,8 +29,8 @@ export KalmanLikelihoodWs, FastKalmanLikelihoodWs, DiffuseKalmanLikelihoodWs, Ka
 
 abstract type KalmanWs{T, U} end
 
-
 struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
+    csmall::Vector{T}
     Zsmall::Matrix{T}
     # necessary for Z selecting vector with missing variables
     iZsmall::Vector{U}
@@ -57,6 +57,7 @@ struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     kalman_tol::T
     
     function KalmanLikelihoodWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
+        csmall = Vector{T}(undef, ny)
         Zsmall = Matrix{T}(undef, ny, ns)
         iZsmall = Vector{U}(undef, ny)
         RQ = Matrix{T}(undef, ns, np)
@@ -81,11 +82,13 @@ struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         PZi = Vector{T}(undef, ns)
         kalman_tol = 1e-12
         
-        new(Zsmall, iZsmall, RQ, QQ, v, F, cholF, cholH, LTcholH,
+        new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, cholH, LTcholH,
             iFv, a1, K, ZP, iFZ, PTmp, oldP, lik, cholHset, ystar,
             Zstar, tmp_ns, PZi, kalman_tol)
     end
 end
+
+KalmanLikelihoodWs(ny, ns, np, nobs) = KalmanLikelihoodWs{Float64, Integer}(ny, ns, np, nobs)
 
 # Z can be either a matrix or a selection vector
 function kalman_likelihood(Y::AbstractArray{U},
@@ -122,7 +125,7 @@ function kalman_likelihood(Y::AbstractArray{U},
                 get_cholF!(ws.cholH, H)
                 cholHset = true
             end
-            ws.lik[t] = univariate_step!(t, Y, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+            ws.lik[t] = univariate_step!(Y, t, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
         else
             # iFv = inv(F)*v
             get_iFv!(ws.iFv, ws.cholF, ws.v)
@@ -144,8 +147,7 @@ function kalman_likelihood(Y::AbstractArray{U},
     LIK
 end
 
-function get_vZsmall(ws::KalmanWs, Z::Matrix{T}, pattern::Vector{U}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
-    n = length(pattern)
+function get_vZsmall(ws::KalmanWs, Z::AbstractMatrix{T}, pattern::Vector{U}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
     vZsmall = view(ws.Zsmall, 1:n, :)
     if n == ny
         copyto!(vZsmall, Z)
@@ -154,8 +156,7 @@ function get_vZsmall(ws::KalmanWs, Z::Matrix{T}, pattern::Vector{U}, n::U, ny::U
     end
 end
 
-function get_vZsmall(ws::KalmanWs, Z::Vector{U}, pattern::Vector{U}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
-    n = length(pattern)
+function get_vZsmall(ws::KalmanWs, Z::AbstractVector{U}, pattern::Vector{U}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
     vZsmall = view(ws.iZsmall, 1:n)
     if n == ny
         copyto!(vZsmall, Z)
@@ -186,6 +187,7 @@ function kalman_likelihood(Y::AbstractArray{U},
     t = start
     iy = 1
     ncolZ = size(Z, 2)
+    cholHset = false
     @inbounds while t <= last
         pattern = data_pattern[t]
         ndata = length(pattern)
@@ -194,6 +196,7 @@ function kalman_likelihood(Y::AbstractArray{U},
         vF = view(ws.F, 1:ndata, 1:ndata)
         vZP = view(ws.ZP, 1:ndata, :)
         vcholF = view(ws.cholF, 1:ndata, 1:ndata)
+        vcholH = view(ws.cholF, 1:ndata, 1:ndata)
         viFv = view(ws.iFv, 1:ndata)
         vK = view(ws.K, 1:ndata, :)
         vZsmall = get_vZsmall(ws, Z, pattern, ndata, ny)
@@ -211,7 +214,7 @@ function kalman_likelihood(Y::AbstractArray{U},
                 get_cholF!(vcholH, vH)
                 cholHset = true
             end
-            ws.lik[t] = univariate_step!(t, Y, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+            ws.lik[t] = univariate_step!(Y, t, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
         else
             # iFv = inv(F)*v
             get_iFv!(viFv, vcholF, vv)
@@ -271,7 +274,8 @@ function kalman_likelihood_monitored(Y::Matrix{U},
                     get_cholF!(ws.cholH, H)
                     cholHset = true
                 end
-                ws.lik[t] = univariate_step!(t, Y, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+                ws.lik[t] = univariate_step!(Y, t, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+                t += 1
                 continue
             end
         end
@@ -328,6 +332,7 @@ function kalman_likelihood_monitored(Y::AbstractArray{U},
     iy = 1
     steady = false
     copy!(ws.oldP, P)
+    cholHset = false
     @inbounds while t <= last
         pattern = data_pattern[t]
         ndata = length(pattern)
@@ -347,13 +352,12 @@ function kalman_likelihood_monitored(Y::AbstractArray{U},
             get_F!(vF, vZP, Z, P, vH)
             info = get_cholF!(ws.cholF, ws.F)
             if info != 0
-                @show info
                 # F is near singular
                 if !cholHset
                     get_cholF!(ws.cholH, H)
                     cholHset = true
                 end
-                ws.lik[t] = univariate_step!(t, Y, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+                ws.lik[t] = univariate_step!(Y, t, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
                 t += 1
                 continue
             end
@@ -388,6 +392,7 @@ function kalman_likelihood_monitored(Y::AbstractArray{U},
 end
 
 struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
+    csmall::Vector{T}
     Zsmall::Matrix{T}
     iZsmall::Vector{U}
     QQ::Matrix{T}
@@ -410,6 +415,7 @@ struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     lik::Vector{T}
     
     function FastKalmanLikelihoodWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
+        csmall = Vector{T}(undef, ny)
         Zsmall = Matrix{T}(undef, ny, ns)
         iZsmall = Vector{U}(undef, ny)
         QQ = Matrix{T}(undef, ns, ns)
@@ -431,7 +437,7 @@ struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         iFZW = Matrix{T}(undef, ny, ny)
         KtiFZW = Matrix{T}(undef, ns, ny)
         lik = Vector{T}(undef, nobs)
-        new(Zsmall, iZsmall, QQ, v, F, cholF, iFv, a1, K, RQ, ZP, M, W, ZW, ZWM, iFZWM, TW, iFZW, KtiFZW, lik)
+        new(csmall, Zsmall, iZsmall, QQ, v, F, cholF, iFv, a1, K, RQ, ZP, M, W, ZW, ZWM, iFZWM, TW, iFZW, KtiFZW, lik)
     end
 end
 
@@ -571,6 +577,7 @@ function fast_kalman_likelihood(Y::Matrix{U},
 end
 
 struct DiffuseKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
+    csmall::Vector{T}
     Zsmall::Matrix{T}
     iZsmall::Vector{U}
     QQ::Matrix{T}
@@ -593,6 +600,7 @@ struct DiffuseKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     Kinf_Finf::Vector{T}
     lik::Vector{T}
     function DiffuseKalmanLikelihoodWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
+        csmall = Vector{T}(undef, ny)
         Zsmall = Matrix{T}(undef, ny, ns)
         iZsmall = Vector{U}(undef, ny)
         QQ = Matrix{T}(undef, ns, ns)
@@ -614,7 +622,7 @@ struct DiffuseKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         uKstar = Vector{T}(undef, ns)
         Kinf_Finf = Vector{T}(undef, ns)
         lik = zeros(T, nobs)
-        new(Zsmall, iZsmall, QQ, RQ, v, F, iF, iFv, a1, cholF, ZP, Fstar, ZPstar, K, iFZ, Kstar, PTmp, uKinf, uKstar, Kinf_Finf, lik)
+        new(csmall, Zsmall, iZsmall, QQ, RQ, v, F, iF, iFv, a1, cholF, ZP, Fstar, ZPstar, K, iFZ, Kstar, PTmp, uKinf, uKstar, Kinf_Finf, lik)
     end
 end
 
@@ -650,7 +658,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
             if norm(ws.F) < tol
                 return t - 1
             else
-                ws.lik[t] += univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws)
+                ws.lik[t] += univariate_step(Y, t, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws)
             end
         else
             ws.lik[t] = log(det_from_cholesky(ws.cholF))
@@ -728,7 +736,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
             if norm(vF) < tol
                 return t - 1
             else
-                ws.lik[t] += univariate_step(t, Y, vZsmall, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, pattern, ws)
+                ws.lik[t] += univariate_step(Y, t, vZsmall, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, pattern, ws)
             end
         else
             ws.lik[t] = log(det_from_cholesky(ws.cholF))
@@ -863,12 +871,15 @@ function kalman_filter!(Y::AbstractArray{U},
     steady = false
     vP = view(P, :, :, 1)
     copy!(ws.oldP, vP)
+    cholHset = false
     @inbounds while t <= last
 
         pattern = data_pattern[t]
         ndata = length(pattern)
-        vc = changeC ? view(c, pattern, t) : view(c, pattern)
+        vc = changeC ? view(c, :, t) : view(c, :)
+        ws.csmall .= view(vc, pattern)
         vZ = changeZ ? view(Z, :, :, t) : view(Z, :, :)
+        get_vZsmall(ws, vZ, pattern, ndata, ny)
         vH = changeH ? view(H, :, :, t) : view(H, :, :)
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
         vR = changeR ? view(R, :, :, t) : view(R, :, :)
@@ -890,23 +901,22 @@ function kalman_filter!(Y::AbstractArray{U},
         vK = view(ws.K, 1:ndata, :, 1)
         
         # v  = Y[:,t] - c - Z*a
-        get_v!(vv, Y, vc, vZ, va, t, pattern)
+        get_v!(vv, Y, vc, ws.Zsmall, va, t, pattern)
         iy += ny
         if !steady
             # F  = Z*P*Z' + H
-            get_F!(vF, vZP, vZ, vP, vvH)
-            get_cholF!(vcholF, vF)
-            info = get_cholF!(ws.cholF, ws.F)
+            get_F!(vF, vZP, ws.Zsmall, vP, vvH)
+            info = get_cholF!(vcholF, vF)
             if info != 0
-                @show info
                 # F is near singular
                 if !cholHset
-                    get_cholF!(ws.cholH, H)
+                    get_cholF!(ws.cholH, vvH)
                     cholHset = true
                 end
-                ws.lik[t] = univariate_step!(t, Y, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+                ws.lik[t] = univariate_step!(Y, t, ws.Zsmall, vvH, T, ws.QQ, va, vP, ws.kalman_tol, ws)
                 t += 1
                 continue
+            end
         end
         # iFv = inv(F)*v
         get_iFv!(viFv, vcholF, vv)
@@ -941,6 +951,7 @@ function kalman_filter!(Y::AbstractArray{U},
 end
 
 struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
+    csmall::Vector{T}
     Zsmall::Matrix{T}
     # necessary for Z selecting vector with missing variables
     iZsmall::Vector{U}
@@ -974,6 +985,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     
 
     function KalmanSmootherWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
+        csmall = Vector{T}(undef, ny)
         Zsmall = Matrix{T}(undef, ny, ns)
         iZsmall = Vector{U}(undef, ny)
         RQ = Matrix{T}(undef, ns, np)
@@ -1004,12 +1016,14 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
         tmp_ns_np = Matrix{T}(undef, ns, np)
         tmp_ny_ny = Matrix{T}(undef, ny, ny)
         
-        new(Zsmall, iZsmall, RQ, QQ, v, F, cholF, iF,
+        new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, iF,
             iFv, r, r1, a1, K, L, L1, N, N1, ZP, B, Kv,
             iFZ, PTmp, oldP, lik, tmp_np, tmp_ns,
             tmp_ny, tmp_ns_np, tmp_ny_ny)
     end
 end
+
+KalmanSmootherWs(ny, ns, np, nobs) = KalmanSmootherWs{Float64, Integer}(ny, ns, np, nobs)
 
 function kalman_filter_2!(Y::AbstractArray{U},
                           c::AbstractArray{U},
@@ -1081,15 +1095,14 @@ function kalman_filter_2!(Y::AbstractArray{U},
         if !steady
             # F  = Z*P*Z' + H
             get_F!(vF, vZP, vZ, vP, vH)
-            info = get_cholF!(ws.cholF, ws.F)
+            info = get_cholF!(vcholF, ws.F)
             if info != 0
-                @show info
                 # F is near singular
                 if !cholHset
                     get_cholF!(ws.cholH, H)
                     cholHset = true
                 end
-                ws.lik[t] = univariate_step!(t, Y, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+                ws.lik[t] = univariate_step!(Y, t, vZ, vH, T, ws.QQ, a, P, ws.kalman_tol, ws)
                 t += 1
                 continue
             end

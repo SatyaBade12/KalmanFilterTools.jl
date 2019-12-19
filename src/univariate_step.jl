@@ -9,21 +9,24 @@ function univariate_step!(t, Y, Z, H, T, QQ, a, P, kalman_tol, ws)
     end
 end
 
-using Test
 function transformed_measurement!(ystar, Zstar, y, Z, cholH)
     LTcholH = LowerTriangular(cholH)
     copy!(ystar, y)
     ldiv!(LTcholH, ystar)
-    @test ystar ≈ inv(LTcholH)*y
     copy!(Zstar, Z)
     ldiv!(LTcholH, Zstar)
-    return LTcholH
+    detLTcholH = 1
+    for i = 1:length(LTcholH)
+        detLTcholH *= detLTcholH
+    end
+    return detLTcholH
 end
 
 function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws)
     ny = size(Y,1)
+    detLTcholH = 1.0
     if !isdiag(H)
-        LTcholH = transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
+        detLTcholH = transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
     else
         copy!(ws.ystar, view(Y, :, t))
@@ -42,11 +45,11 @@ function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws)
         end
     end
     mul!(ws.a1, T, a)
-    copy!(a, ws.a1)
+    a .= ws.a1
     mul!(ws.PTmp, T, P)
     copy!(P, RQR)
     mul!(P, ws.PTmp, T', 1.0, 1.0)
-    return llik + 2*log(det(LTcholH))
+    return llik + 2*log(detLTcholH)
 end
 
 function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws)
