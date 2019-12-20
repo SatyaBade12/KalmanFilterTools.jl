@@ -16,8 +16,8 @@ function transformed_measurement!(ystar, Zstar, y, Z, cholH)
     copy!(Zstar, Z)
     ldiv!(LTcholH, Zstar)
     detLTcholH = 1
-    for i = 1:length(LTcholH)
-        detLTcholH *= detLTcholH
+    for i = 1:size(LTcholH,1)
+        detLTcholH *= LTcholH[i,i]
     end
     return detLTcholH
 end
