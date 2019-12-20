@@ -42,7 +42,7 @@ RQR = R*Q*R'
 a = randn(ns)
 P = randn(ns, ns)
 P = P'*P
-kalman_tol = eps()^(3/3)
+kalman_tol = eps()^(2/3)
 
 a0 = copy(a)
 P0 = copy(P)
@@ -64,6 +64,6 @@ lik1a = KalmanFilterTools.kalman_filter!(Y[:,1]', zeros(3), ZZ, H, zeros(ns), TT
 a0 = copy(a)
 P0 = copy(P)
 lik1 = KalmanFilterTools.kalman_likelihood(Y, Z, H, T, R, Q, a0, P0, 1, nobs, 0, ws)
-#@test a1 ≈ a0
-#@test P1 ≈ P0
+@test a1 ≈ a0
+@test P1 ≈ P0
 @test lik0 ≈ ws.lik[1]  

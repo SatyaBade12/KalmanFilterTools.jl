@@ -88,7 +88,7 @@ struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     end
 end
 
-KalmanLikelihoodWs(ny, ns, np, nobs) = KalmanLikelihoodWs{Float64, Integer}(ny, ns, np, nobs)
+KalmanLikelihoodWs(ny, ns, np, nobs) = KalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
 
 # Z can be either a matrix or a selection vector
 function kalman_likelihood(Y::AbstractArray{U},
@@ -147,24 +147,6 @@ function kalman_likelihood(Y::AbstractArray{U},
     LIK
 end
 
-function get_vZsmall(ws::KalmanWs, Z::AbstractMatrix{T}, pattern::Vector{U}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
-    vZsmall = view(ws.Zsmall, 1:n, :)
-    if n == ny
-        copyto!(vZsmall, Z)
-    else
-        vZsmall .= view(Z, pattern, :)
-    end
-end
-
-function get_vZsmall(ws::KalmanWs, Z::AbstractVector{U}, pattern::Vector{U}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
-    vZsmall = view(ws.iZsmall, 1:n)
-    if n == ny
-        copyto!(vZsmall, Z)
-    else
-        vZsmall .= view(Z, pattern)
-    end
-end
-
 function kalman_likelihood(Y::AbstractArray{U},
                            Z::AbstractArray{W},
                            H::AbstractArray{U},
@@ -199,7 +181,7 @@ function kalman_likelihood(Y::AbstractArray{U},
         vcholH = view(ws.cholF, 1:ndata, 1:ndata)
         viFv = view(ws.iFv, 1:ndata)
         vK = view(ws.K, 1:ndata, :)
-        vZsmall = get_vZsmall(ws, Z, pattern, ndata, ny)
+        vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny)
         
         # v  = Y[:,t] - Z*a
         get_v!(vv, Y, vZsmall, a, t, pattern)
@@ -441,6 +423,8 @@ struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     end
 end
 
+FastKalmanLikelihoodWs(ny, ns, np, nobs) = FastKalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
+
 """
 K doesn't represent the same matrix as above
 """
@@ -546,7 +530,7 @@ function fast_kalman_likelihood(Y::Matrix{U},
         vZWM = view(ws.ZWM, 1:ndata, 1:ndata)
         viFZWM = view(ws.iFZWM, 1:ndata, 1:ndata)
         vKtiFZW = view(ws.KtiFZW, :, 1:ndata)
-        vZsmall = get_vZsmall(ws, Z, pattern, ndata, ny)
+        vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny)
         
         # v  = Y[:,t] - Z*a
         get_v!(vv, Y, vZsmall, a, t, pattern)
@@ -724,7 +708,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
         viFv = view(ws.iFv, 1:ndata)
         vK = view(ws.K, 1:ndata, :)
         vKstar = view(ws.Kstar, 1:ndata, :)
-        vZsmall = get_vZsmall(ws, Z, pattern, ndata, ny)
+        vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny)
         
         # v  = Y[:,t] - Z*a
         get_v!(vv, Y, vZsmall, a, t, pattern)
@@ -879,7 +863,7 @@ function kalman_filter!(Y::AbstractArray{U},
         vc = changeC ? view(c, :, t) : view(c, :)
         ws.csmall .= view(vc, pattern)
         vZ = changeZ ? view(Z, :, :, t) : view(Z, :, :)
-        get_vZsmall(ws, vZ, pattern, ndata, ny)
+        vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, vZ, pattern, ndata, ny)
         vH = changeH ? view(H, :, :, t) : view(H, :, :)
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
         vR = changeR ? view(R, :, :, t) : view(R, :, :)
@@ -901,11 +885,11 @@ function kalman_filter!(Y::AbstractArray{U},
         vK = view(ws.K, 1:ndata, :, 1)
         
         # v  = Y[:,t] - c - Z*a
-        get_v!(vv, Y, vc, ws.Zsmall, va, t, pattern)
+        get_v!(vv, Y, vc, vZsmall, va, t, pattern)
         iy += ny
         if !steady
             # F  = Z*P*Z' + H
-            get_F!(vF, vZP, ws.Zsmall, vP, vvH)
+            get_F!(vF, vZP, vZsmall, vP, vvH)
             info = get_cholF!(vcholF, vF)
             if info != 0
                 # F is near singular
@@ -1023,7 +1007,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     end
 end
 
-KalmanSmootherWs(ny, ns, np, nobs) = KalmanSmootherWs{Float64, Integer}(ny, ns, np, nobs)
+KalmanSmootherWs(ny, ns, np, nobs) = KalmanSmootherWs{Float64, Int64}(ny, ns, np, nobs)
 
 function kalman_filter_2!(Y::AbstractArray{U},
                           c::AbstractArray{U},

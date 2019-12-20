@@ -37,7 +37,7 @@ function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws)
         Zi = view(ws.Zstar, i, :)
         v = get_v!(ws.ystar, ws.Zstar, a, i)
         F = get_F(Zi, P, H[i,i], ws.PZi)
-        if F > kalman_tol
+        if abs(F) > kalman_tol
             a .+= (v/F) .* ws.PZi
             # P = P - PZi*PZi'/F 
             ger!(-1.0/F, ws.PZi, ws.PZi, P) 

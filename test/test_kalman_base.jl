@@ -64,14 +64,13 @@ tmp = zeros(np)
 KalmanFilterTools.get_etah!(eta, Q, R, r, tmp)
 @test eta ≈ Q*R'*r
 
-Z = randn(ny, ns)
 H = randn(ny, ny)
 H = H'*H
-F = randn(ny, ny)
-ZP = randn(ny, ns)
-P = randn(ns, ns)
+F = zeros(ny, ny)
+ZP = zeros(ny, ns)
+Z = randn(ny, ns)
 KalmanFilterTools.get_F!(F, ZP, Z, P, H)
-@test ZP ≈ Z*P
+@test ZP == Z*P
 @test F ≈ Z*P*Z' + H
 
 # Z as selection matrix
@@ -207,6 +206,23 @@ tmp = zeros(ns, np)
 KalmanFilterTools.get_Veta!(Veta, Q, R, N, RQ, tmp)
 @test Veta ≈ Q - Q*R'*N*R*Q
 
+
+Zsmall = randn(ny, ns)
+iZsmall = rand(Int, ny)
+Z = randn(ny, ns)
+pattern = [1, 3]
+n = length(pattern)
+vZsmall = KalmanFilterTools.get_vZsmall(Zsmall, iZsmall, Z, pattern, n, ny)
+@test all(vZsmall .== Z[pattern, :])
+
+Zsmall = randn(ny, ns)
+iZsmall = rand(Int, ny)
+Z = [4, 3, 6]
+pattern = [1, 3]
+n = length(pattern)
+vZsmall = KalmanFilterTools.get_vZsmall(Zsmall, iZsmall, Z, pattern, n, ny)
+@test all(vZsmall .== Z[pattern])
+
 # a = T(a + K'*iFv)
 a_0 = copy(a)
 a1 = similar(a)
@@ -232,16 +248,19 @@ KalmanFilterTools.update_K!(K, ZWM, W)
 
 # M = M + M*W'*Z'iF*Z*W*M
 M_0 = copy(M)
+Z = randn(ny, ns)
 ZWM = similar(M)
 iFZWM = similar(M)
 KalmanFilterTools.update_M!(M, Z, W, cholF, ZW, ZWM, iFZWM)
 @test M ≈ M_0 + M_0*W'*Z'*inv(F)*Z*W*M_0
 
 # N_{t-1} = Z_t'iF_t*Z_t + L_t'N_t*L_t
+Z = randn(ny, ns)
 N = randn(ns, ns)
 N = N'*N
 N1 = similar(N)
 iFZ = randn(ny, ns)
+L = randn(ns, ns)
 Ptmp = similar(P)
 KalmanFilterTools.update_N!(N1, Z, iFZ, L, N, Ptmp)
 @test N1 ≈ Z'*iFZ + L'*N*L

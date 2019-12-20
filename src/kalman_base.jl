@@ -272,6 +272,24 @@ function get_Veta!(Veta, Q, R, N, RQ, tmp)
     mul!(Veta, RQ', tmp, -1.0, 1.0)
 end
 
+function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, Z::AbstractMatrix{T}, pattern::AbstractVector{Int64}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+    vZsmall = view(Zsmall, 1:n, :)
+    if n == ny
+        copyto!(vZsmall, Z)
+    else
+        vZsmall .= view(Z, pattern, :)
+    end
+end
+
+function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, Z::AbstractVector{Int64}, pattern::AbstractVector{Int64}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+    vZsmall = view(iZsmall, 1:n)
+    if n == ny
+        copyto!(vZsmall, Z)
+    else
+        vZsmall .= view(Z, pattern)
+    end
+end
+
 # a = T(a + K'*v)
 function update_a!(a::AbstractVector{U}, K::AbstractMatrix{U}, v::AbstractVector{U}, a1::Vector{U}, T::AbstractMatrix{U}) where U <: AbstractFloat
     copy!(a1, a)
