@@ -82,7 +82,7 @@ struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         PZi = Vector{T}(undef, ns)
         kalman_tol = 1e-12
         
-        new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, cholH, LTcholH,
+         new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, cholH, LTcholH,
             iFv, a1, K, ZP, iFZ, PTmp, oldP, lik, cholHset, ystar,
             Zstar, tmp_ns, PZi, kalman_tol)
     end
@@ -104,14 +104,14 @@ function kalman_likelihood(Y::AbstractArray{U},
                            presample::V,
                            ws::KalmanWs) where {U <: AbstractFloat, W <: Real, V <: Integer}
     ny = size(Y,1)
-    nobs = size(Y,2)
+    nobs = last - start + 1
     # QQ = R*Q*R'
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     lik_cst = (nobs - presample)*ny*log(2*pi)
     fill!(ws.lik, 0.0)
     cholHset = false
     t = start
-    iy = 1
+    iy = (start - 1)*ny + 1
     @inbounds while t <= last
         # v  = Y[:,t] - Z*a
         get_v!(ws.v, Y, Z, a, iy, ny)
@@ -161,13 +161,13 @@ function kalman_likelihood(Y::AbstractArray{U},
                            ws::KalmanWs,
                            data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer}
     ny = size(Y,1)
-    nobs = size(Y,2)
+    nobs = last - start + 1
     # QQ = R*Q*R'
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     l2pi = log(2*pi)
     fill!(ws.lik, 0.0)
     t = start
-    iy = 1
+    iy = (start - 1)*ny + 1
     ncolZ = size(Z, 2)
     cholHset = false
     @inbounds while t <= last
@@ -231,14 +231,14 @@ function kalman_likelihood_monitored(Y::Matrix{U},
                                      presample::V,
                                      ws::KalmanWs) where {U <: AbstractFloat, V <: Integer, W <: Real}
     ny = size(Y,1)
-    nobs = size(Y,2)
+    nobs = last - start + 1
     ns = size(T,1)
     # QQ = R*Q*R'
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     lik_cst = (nobs - presample)*ny*log(2*pi)
     fill!(ws.lik, 0.0)
     t = start
-    iy = 1
+    iy = (start - 1)*ny + 1
     steady = false
     copy!(ws.oldP, P)
     @inbounds while t <= last
@@ -304,14 +304,14 @@ function kalman_likelihood_monitored(Y::AbstractArray{U},
                                      ws::KalmanWs,
                                      data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer}
     ny = size(Y,1)
-    nobs = size(Y,2)
+    nobs = last - start + 1
     ns = size(T,1)
     # QQ = R*Q*R'
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     l2pi = log(2*pi)
     fill!(ws.lik, 0.0)
     t = start
-    iy = 1
+    iy = (start - 1)*ny + 1
     steady = false
     copy!(ws.oldP, P)
     cholHset = false
@@ -395,6 +395,7 @@ struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     iFZW::Matrix{T}
     KtiFZW::Matrix{T}
     lik::Vector{T}
+    kalman_tol::T
     
     function FastKalmanLikelihoodWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
         csmall = Vector{T}(undef, ny)
@@ -419,7 +420,8 @@ struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         iFZW = Matrix{T}(undef, ny, ny)
         KtiFZW = Matrix{T}(undef, ns, ny)
         lik = Vector{T}(undef, nobs)
-        new(csmall, Zsmall, iZsmall, QQ, v, F, cholF, iFv, a1, K, RQ, ZP, M, W, ZW, ZWM, iFZWM, TW, iFZW, KtiFZW, lik)
+        kalman_tol = 1e-12
+        new(csmall, Zsmall, iZsmall, QQ, v, F, cholF, iFv, a1, K, RQ, ZP, M, W, ZW, ZWM, iFZWM, TW, iFZW, KtiFZW, lik, kalman_tol)
     end
 end
 
@@ -441,7 +443,7 @@ function fast_kalman_likelihood(Y::Matrix{U},
                                 presample::V,
                                 ws::KalmanWs) where {U <: AbstractFloat, V <: Integer, W <: Real}
     ny = size(Y,1)
-    nobs = size(Y,2)
+    nobs = last - start + 1
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     lik_cst = (nobs - presample)*ny*log(2*pi)
     fill!(ws.lik, 0.0)
@@ -456,7 +458,7 @@ function fast_kalman_likelihood(Y::Matrix{U},
     get_M!(ws.M, ws.cholF, ws.ZW) 
     LIK = 0
     t = start
-    iy = 1
+    iy = (start - 1)*ny + 1
     @inbounds while t <= last
         # v  = Y[:,t] - Z*a
         get_v!(ws.v, Y, Z, a, iy, ny)
@@ -500,7 +502,7 @@ function fast_kalman_likelihood(Y::Matrix{U},
                                 ws::KalmanWs,
                                 data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, V <: Integer, W <: Real}
     ny = size(Y,1)
-    nobs = size(Y,2)
+    nobs = last - start + 1
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     l2pi = log(2*pi)
     fill!(ws.lik, 0.0)
@@ -515,7 +517,7 @@ function fast_kalman_likelihood(Y::Matrix{U},
     get_M!(ws.M, ws.cholF, ws.ZW) 
     LIK = 0
     t = start
-    iy = 1
+    iy = (start - 1)*ny + 1
     @inbounds while t <= last
         pattern = data_pattern[t]
         ndata = length(pattern)
@@ -583,6 +585,7 @@ struct DiffuseKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     uKstar::Vector{T}
     Kinf_Finf::Vector{T}
     lik::Vector{T}
+    kalman_tol::T
     function DiffuseKalmanLikelihoodWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
         csmall = Vector{T}(undef, ny)
         Zsmall = Matrix{T}(undef, ny, ns)
@@ -606,7 +609,8 @@ struct DiffuseKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         uKstar = Vector{T}(undef, ns)
         Kinf_Finf = Vector{T}(undef, ns)
         lik = zeros(T, nobs)
-        new(csmall, Zsmall, iZsmall, QQ, RQ, v, F, iF, iFv, a1, cholF, ZP, Fstar, ZPstar, K, iFZ, Kstar, PTmp, uKinf, uKstar, Kinf_Finf, lik)
+        kalman_tol = 1e-12
+        new(csmall, Zsmall, iZsmall, QQ, RQ, v, F, iF, iFv, a1, cholF, ZP, Fstar, ZPstar, K, iFZ, Kstar, PTmp, uKinf, uKstar, Kinf_Finf, lik, kalman_tol)
     end
 end
 
@@ -628,7 +632,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
     ny = size(Y, 1)
     t = start
     LIK = 0
-    iy = 1
+    iy = (start - 1)*ny + 1 
     diffuse_kalman_tol = 1e-8
     kalman_tol = 1e-8
     while t <= last
@@ -692,7 +696,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
     ny = size(Y, 1)
     t = start
     LIK = 0
-    iy = 1
+    iy = (start - 1)*ny + 1
     diffuse_kalman_tol = 1e-8
     kalman_tol = 1e-8
     while t <= last
@@ -768,7 +772,7 @@ function diffuse_kalman_likelihood(Y::Matrix{U},
                                                                          V <: Integer,
                                                                          W <: Real}
     ny = size(Y,1)
-    nobs = size(Y,2)
+    nobs = last - start + 1
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     lik_cst = (nobs - presample)*ny*log(2*pi)
     fill!(ws.lik, 0.0)
@@ -800,7 +804,7 @@ function diffuse_kalman_likelihood(Y::Matrix{U},
                                                                          V <: Integer,
                                                                          W <: Real}
     ny = size(Y,1)
-    nobs = size(Y,2)
+    nobs = last - start + 1
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     lik_cst = (nobs - presample)*ny*log(2*pi)
     fill!(ws.lik, 0.0)
@@ -842,7 +846,7 @@ function kalman_filter!(Y::AbstractArray{U},
     changeP = ndims(P) > 2
     
     ny = size(Y, 1)
-    nobs = size(Y, 2)
+    nobs = last - start + 1
     ns = size(T,1)
     # QQ = R*Q*R'
     vR = view(R, :, :, 1)
@@ -851,7 +855,7 @@ function kalman_filter!(Y::AbstractArray{U},
     l2pi = log(2*pi)
     fill!(ws.lik, 0.0)
     t = start
-    iy = 1
+    iy = (start - 1)*ny + 1
     steady = false
     vP = view(P, :, :, 1)
     copy!(ws.oldP, vP)
@@ -1035,7 +1039,7 @@ function kalman_filter_2!(Y::AbstractArray{U},
     changeP = ndims(P) > 2
     
     ny = size(Y,1)
-    nobs = size(Y,2)
+    nobs = last - start + 1
     ns = size(T,1)
     # QQ = R*Q*R'
     vR = view(R, :, :, 1)
@@ -1044,7 +1048,7 @@ function kalman_filter_2!(Y::AbstractArray{U},
     l2pi = log(2*pi)
     fill!(ws.lik, 0.0)
     t = start
-    iy = 1
+    iy = (start - 1)*ny + 1
     steady = false
     vP = view(P, :, :, 1)
     copy!(ws.oldP, vP)

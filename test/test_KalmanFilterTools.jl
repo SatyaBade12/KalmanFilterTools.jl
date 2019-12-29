@@ -328,5 +328,60 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     @test llk_5 ≈ llk_4 
 end
 
+@testset "start and last" begin
+    nobs1 = nobs - 1
+    ws1 = KalmanLikelihoodWs{Float64, Integer}(ny, ns, np, nobs)
+
+    P_0 = randn(ns, ns)
+    P_0 = P_0'P_0
+    
+    a = copy(a_0)
+    P = copy(P_0)
+    llk_1 = kalman_likelihood(Y[:,2:nobs1], Z, H, T, R, Q, a, P, 1, nobs-2, 0, ws1)
+    copy!(a, a_0)
+    copy!(P, P_0)
+    llk_2 = kalman_likelihood(Y, Z, H, T, R, Q, a, P, 2, nobs1, 0, ws1)
+    @test llk_2 ≈ llk_1
+
+    copy!(a, a_0)
+    copy!(P, P_0)
+    llk_1 = kalman_likelihood_monitored(Y[:,2:nobs1], Z, H, T, R, Q, a, P, 1, nobs-2, 0, ws1)
+    copy!(a, a_0)
+    copy!(P, P_0)
+    llk_2 = kalman_likelihood_monitored(Y, Z, H, T, R, Q, a, P, 2, nobs1, 0, ws1)
+    @test llk_2 ≈ llk_1
+
+    copy!(a, a_0)
+    copy!(P, P_0)
+    llk_1 = kalman_likelihood(Y[:,2:nobs1], Z, H, T, R, Q, a, P, 1, nobs-2, 0, ws1, full_data_pattern)
+    copy!(a, a_0)
+    copy!(P, P_0)
+    llk_2 = kalman_likelihood(Y, Z, H, T, R, Q, a, P, 2, nobs-1, 0, ws1, full_data_pattern)
+    @test llk_2 ≈ llk_1
+
+    copy!(a, a_0)
+    copy!(P, P_0)
+    llk_1 = kalman_likelihood_monitored(Y[:,2:nobs1], Z, H, T, R, Q, a, P, 1, nobs-2, 0 , ws1, full_data_pattern)
+    copy!(a, a_0)
+    copy!(P, P_0)
+    llk_2 = kalman_likelihood_monitored(Y, Z, H, T, R, Q, a, P, 2, nobs-1, 0, ws1, full_data_pattern)
+    @test llk_2 ≈ llk_1
+
+    ws4 = DiffuseKalmanLikelihoodWs{Float64, Integer}(ny, ns, np, nobs)
+    
+    z = [4, 3]
+    a = copy(a_0)
+    Pinf = copy(Pinf_0)
+    Pstar = copy(Pstar_0)
+    copy!(ws4.QQ, R*Q*R')
+
+    llk_4 = diffuse_kalman_likelihood(Y[:,2:nobs1], z, H, T, R, Q, a, Pinf, Pstar, 1, nobs-2, 0, 1e-8, ws4, full_data_pattern)
+
+    a = copy(a_0)
+    Pinf = copy(Pinf_0)
+    Pstar = copy(Pstar_0)
+    llk_5 = diffuse_kalman_likelihood(Y, z, H, T, R, Q, a, Pinf, Pstar, 2, nobs-1, 0, 1e-8, ws4, full_data_pattern)
+    @test llk_5 ≈ llk_4 
+end
 nothing
 
