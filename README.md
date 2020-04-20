@@ -11,12 +11,12 @@ Because such operations are very often computed in an iterative manner, all oper
 KalmanFilterTools is available on GitLab:
 
 ```
-(v1.3) pkg> add https://gitlab.com/MichelJuillard/KalmanFilterTools
+(v1.4) pkg> add https://git.dynare.org/julia-packages/kalmanfiltertools.jl.git
 ```
 
 ## Julia version
 
-KalmanFilterTools requires Julia version >= 1.0
+KalmanFilterTools requires Julia version >= 1.4
 
 ## State Space model
 KalmanFilterTools handles state space models of the following form:
