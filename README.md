@@ -1,4 +1,4 @@
-# KalmanFilterTools
+# KalmanFilterTools.jl
 
 WORK IN PROGRESS
 
@@ -8,7 +8,7 @@ Because such operations are very often computed in an iterative manner, all oper
 
 ## Installation
 
-KalmanFilterTools is available on GitLab:
+KalmanFilterTools.jl is available on GitLab:
 
 ```
 (v1.4) pkg> add https://git.dynare.org/julia-packages/kalmanfiltertools.jl.git
