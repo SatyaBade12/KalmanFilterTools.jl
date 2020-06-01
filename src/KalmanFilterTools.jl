@@ -1118,7 +1118,7 @@ function kalman_filter_2!(Y::AbstractArray{U},
         viF = view(ws.iF, 1:ndata, 1:ndata, t)
         viFv = view(ws.iFv, 1:ndata, t)
         vK = view(ws.K, 1:ndata, :, t)
-        vKDK = view(ws.KDK, 1:ndata, :, t) # Kalman Filter Gain according to Durbin & Koopman (4.22)
+        vKDK = view(ws.KDK, :, 1:ndata, t) # Kalman Filter Gain according to Durbin & Koopman (4.22)
 
         # v  = Y[:,t] - c - Z*a
         get_v!(vv, Y, vc, vZ, va, t, pattern)
