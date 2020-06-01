@@ -1057,6 +1057,7 @@ function kalman_filter_2!(Y::AbstractArray{U},
     fill!(ws.lik, 0.0)
     t = start
     steady = false
+    cholHset = false
 #    copy!(ws.oldP, vP)
     while t <= last
         #inputs
@@ -1091,17 +1092,17 @@ function kalman_filter_2!(Y::AbstractArray{U},
             # F  = Z*P*Z' + H
             # builds also ZP
         get_F!(vF, vZP, vZ, vP, vH)
-            info = get_cholF!(vcholF, vF)
-            if info != 0
-                # F is near singular
-                if !cholHset
+        info = get_cholF!(vcholF, vF)
+        if info != 0
+            # F is near singular
+            if !cholHset
                     get_cholF!(ws.cholH, H)
-                    cholHset = true
-                end
-                ws.lik[t] = univariate_step!(Y, t, vZ, vH, vT, ws.QQ, a, P, ws.kalman_tol, ws)
-                t += 1
-                continue
+                cholHset = true
             end
+            ws.lik[t] = univariate_step!(Y, t, vZ, vH, vT, ws.QQ, a, P, ws.kalman_tol, ws)
+            t += 1
+            continue
+        end
 #        end
         # iFv = inv(F)*v
         get_iF!(viF, vcholF)
