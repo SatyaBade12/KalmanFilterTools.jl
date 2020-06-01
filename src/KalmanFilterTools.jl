@@ -954,14 +954,14 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     r::Vector{T}
     r1::Vector{T}
     at_t::Matrix{T}
-    K::Matrix{T}
-    KDK::Matrix{T}
+    K::Array{T}
+    KDK::Array{T}
     L::Matrix{T}
     L1::Matrix{T}
     N::Matrix{T}
     N1::Matrix{T}
     ZP::Matrix{T}
-    Pt_t::Matrix{T}
+    Pt_t::Array{T}
     Kv::Matrix{T}
     iFZ::Matrix{T}
     PTmp::Matrix{T}
