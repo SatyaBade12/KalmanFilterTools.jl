@@ -424,9 +424,9 @@ struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         TW = Matrix{T}(undef, ns, ny)
         iFZW = Matrix{T}(undef, ny, ny)
         KtiFZW = Matrix{T}(undef, ns, ny)
-        ystar = Vector{T}(undef, ny}
-        Zstar = Matrix{T}(undef, ny, ns}
-        Hstar = Matrix{T}(undef, ny, ny}
+        ystar = Vector{T}(undef, ny)
+        Zstar = Matrix{T}(undef, ny, ns)
+        Hstar = Matrix{T}(undef, ny, ny)
         lik = Vector{T}(undef, nobs)
         kalman_tol = 1e-12
         new(csmall, Zsmall, iZsmall, QQ, v, F, cholF, iFv, a1, K, RQ, ZP, M, W,
@@ -620,9 +620,9 @@ struct DiffuseKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         uKinf = Vector{T}(undef, ns)
         uKstar = Vector{T}(undef, ns)
         Kinf_Finf = Vector{T}(undef, ns)
-        ystar = Vector{T}(undef, ny}
-        Zstar = Matrix{T}(undef, ny, ns}
-        Hstar = Matrix{T}(undef, ny, ny}
+        ystar = Vector{T}(undef, ny)
+        Zstar = Matrix{T}(undef, ny, ns)
+        Hstar = Matrix{T}(undef, ny, ny)
         lik = zeros(T, nobs)
         kalman_tol = 1e-12
         new(csmall, Zsmall, iZsmall, QQ, RQ, v, F, iF, iFv, a1, cholF, ZP, Fstar,
@@ -1027,9 +1027,9 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
         lik = Vector{T}(undef, nobs)
         KT = Matrix{T}(undef, ny, ns)
         D = Matrix{T}(undef, ny, ny)
-        ystar = Vector{T}(undef, ny}
-        Zstar = Matrix{T}(undef, ny, ns}
-        Hstar = Matrix{T}(undef, ny, ny}
+        ystar = Vector{T}(undef, ny)
+        Zstar = Matrix{T}(undef, ny, ns)
+        Hstar = Matrix{T}(undef, ny, ny)
         tmp_np = Vector{T}(undef, np)
         tmp_ns = Vector{T}(undef, ns)
         tmp_ny = Vector{T}(undef, ny)
