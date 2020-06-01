@@ -32,15 +32,15 @@ function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws)
         copy!(ws.ystar, view(Y, :, t))
         copy!(ws.Zstar, Z)
     end
-    llik = 0
+    llik = 0.0
     for i=1:ny
         Zi = view(ws.Zstar, i, :)
         v = get_v!(ws.ystar, ws.Zstar, a, i)
         F = get_F(Zi, P, H[i,i], ws.PZi)
         if abs(F) > kalman_tol
             a .+= (v/F) .* ws.PZi
-            # P = P - PZi*PZi'/F 
-            ger!(-1.0/F, ws.PZi, ws.PZi, P) 
+            # P = P - PZi*PZi'/F
+            ger!(-1.0/F, ws.PZi, ws.PZi, P)
             llik += log(F) + v*v/F
         end
     end
@@ -53,10 +53,9 @@ function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws)
 end
 
 function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws)
-    llik = 0
-    for i=1:size(Y, 1)
+    llik = 0.0
+    for i=1:size(Y,1)
         Zi = view(Z, i, :)
-        v = get_v!(Y, Z, a, i, t)
         Fstar = get_Fstar!(Zi, Pstar, H[i], ws.uKstar)
         Finf = get_Finf!(Zi, Pstar, ws.uKstar)
         # Conduct check of rank
@@ -67,17 +66,17 @@ function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, 
         # Also the test for singularity is better set coarser for Finf than for Fstar for the same reason
         if Finf > diffuse_kalman_tol                 # F_{\infty,t,i} = 0, use upper part of bracket on p. 175 DK (2012) for w_{t,i}
             ws.Kinf_Finf .= ws.uKinf./Finf
-            a .+= prediction_error.*ws.Kinf_Finf
+            a .+= ws.v[i].*ws.Kinf_Finf
             # Pstar     = Pstar + Kinf*(Kinf_Finf'*(Fstar/Finf)) - Kstar*Kinf_Finf' - Kinf_Finf*Kstar'
-            ger!( Fstar/Finf, ws.uKinf, ws.Kinf_Finf, Pstar) 
-            ger!( -1.0, ws.uKstar, ws.Kinf_Finf, Pstar) 
-            ger!( -1.0, ws.Kinf_Finf, ws.uKstar, Pstar) 
+            ger!( Fstar/Finf, ws.uKinf, ws.Kinf_Finf, Pstar)
+            ger!( -1.0, ws.uKstar, ws.Kinf_Finf, Pstar)
+            ger!( -1.0, ws.Kinf_Finf, ws.uKstar, Pstar)
             # Pinf      = Pinf - Kinf*Kinf_Finf'
-            ger!(-1.0, ws.uKinf, ws.Kinf_Finf, Pinf) 
+            ger!(-1.0, ws.uKinf, ws.Kinf_Finf, Pinf)
             llik += log(Finf)
         elseif Fstar > kalman_tol
-            llik += log(Fstar) + v*v/Fstar
-            a .+= ws.uKstar.*(v/Fstar)
+            llik += log(Fstar) + ws.v[i]*ws.v[i]/Fstar
+            a .+= ws.uKstar.*(ws.v[i]/Fstar)
             ger!(-1/Fstar, ws.uKstar, ws.uKstar, Pstar)
         else
             # do nothing as a_{t,i+1}=a_{t,i} and P_{t,i+1}=P_{t,i}, see
@@ -88,7 +87,7 @@ function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, 
 end
 
 function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws, pattern)
-    llik = 0
+    llik = 0.0
     for i=1:size(pattern, 1)
         Zi = view(Z, pattern[i], :)
         v = get_v(Y, Z, a, pattern[i], t)
@@ -104,11 +103,11 @@ function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, 
             ws.Kinf_Finf .= ws.uKinf./Finf
             a .+= prediction_error.*ws.Kinf_Finf
             # Pstar     = Pstar + Kinf*(Kinf_Finf'*(Fstar/Finf)) - Kstar*Kinf_Finf' - Kinf_Finf*Kstar'
-            ger!( Fstar/Finf, ws.uKinf, ws.Kinf_Finf, Pstar) 
-            ger!( -1.0, ws.uKstar, ws.Kinf_Finf, Pstar) 
-            ger!( -1.0, ws.Kinf_Finf, ws.uKstar, Pstar) 
+            ger!( Fstar/Finf, ws.uKinf, ws.Kinf_Finf, Pstar)
+            ger!( -1.0, ws.uKstar, ws.Kinf_Finf, Pstar)
+            ger!( -1.0, ws.Kinf_Finf, ws.uKstar, Pstar)
             # Pinf      = Pinf - Kinf*Kinf_Finf'
-            ger!(-1.0, ws.uKinf, ws.Kinf_Finf, Pinf) 
+            ger!(-1.0, ws.uKinf, ws.Kinf_Finf, Pinf)
             llik += log(Finf)
         elseif Fstar > kalman_tol
             llik += log(Fstar) + v*v/Fstar
@@ -121,4 +120,3 @@ function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, 
     end
     return llik
 end
-

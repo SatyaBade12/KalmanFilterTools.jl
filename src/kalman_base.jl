@@ -9,7 +9,7 @@ end
 # alphah_t = a_t + P_t*r_{t-1}
 function get_alphah!(alphah::AbstractVector{T}, a::AbstractVector{T}, P::AbstractArray{T}, r::AbstractVector{T}) where T <: AbstractFloat
     alphah .= a
-    gemm!('N', 'N', 1.0, P, r, 1.0, alphah)
+    mul!(alphah,P, r, 1.0, 1.0)
 end
 
 function get_cholF!(cholF::AbstractArray{T}, F::AbstractArray{T}) where T <: AbstractFloat
@@ -34,7 +34,26 @@ function get_D!(D, cholF, K, T, N, KT, tmp)
     mul!(D, tmp, KT', 1.0, 1.0)
 end
 
-# epsilonh_t = H*(iF_t*v_t - K_t*T*r_t)
+
+# D = inv(F_t) + K(DK)_t'*N_t*K(DK)_t (DK 4.69)
+function get_D!(D::AbstractMatrix{U}, iF::AbstractMatrix{U}, K::AbstractMatrix{U}, N::AbstractMatrix{U}, tmp::AbstractMatrix{U}) where U <: AbstractFloat
+    copy!(D,iF)
+    mul!(tmp, transpose(K), N)
+    mul!(D, tmp, K, 1.0, 1.0)
+end
+
+# epsilon_h = H*(iF_t*v_t - K(DK)_t'*r_t) (DK 4.69)
+function get_epsilonh!(epsilon::AbstractVector{U}, H::AbstractMatrix{U},
+                       iFv::AbstractVector{U}, K::AbstractMatrix{U},
+                       r::AbstractVector{U},
+                       tmp1::AbstractVector{U},
+                       tmp2::AbstractVector{U}) where U <: AbstractFloat
+    copy!(tmp1, iFv)
+    mul!(tmp1, transpose(K), r, -1.0, 1.0)
+    mul!(epsilon, H, tmp1)
+end
+
+# epsilonh_t = H*(iF_t*v_t - K_t*T*r_t) Different K !!!
 function get_epsilonh!(epsilon::AbstractVector{U}, H::AbstractMatrix{U},
                        iFv::AbstractVector{U}, K::AbstractMatrix{U},
                        T::AbstractMatrix{U}, r::AbstractVector{U},
@@ -50,7 +69,7 @@ end
 function get_etah!(etah::AbstractVector{T}, Q::AbstractMatrix{T},
                    R::AbstractMatrix{T}, r::AbstractVector{T},
                    tmp::AbstractVector{T}) where T <: AbstractFloat
-    mul!(tmp, R', r)
+    mul!(tmp, transpose(R), r)
     mul!(etah, Q, tmp)
 end
 
@@ -105,8 +124,8 @@ function get_Fstar!(z::U, p::AbstractArray{T}, h::T, ukstar::AbstractVector{T}) 
 end
 
 function get_iF!(iF::AbstractArray{T}, cholF::AbstractArray{T}) where T <: AbstractFloat
-    copy!(iFZ, Z)
-    LAPACK.potri!('U', cholF)
+    copy!(iF, cholF)
+    LAPACK.potri!('U', iF)
 end
 
 function get_iFv!(iFv::AbstractVector{T}, cholF::AbstractArray{T}, v::AbstractVector{T}) where T <: AbstractFloat
@@ -137,10 +156,16 @@ function get_Kstar!(Kstar::AbstractArray{T}, z::AbstractVector{U}, Pstar::Abstra
     LAPACK.potrs!('U', cholF, Kstar)
 end
 
-# L = T(I - K'*Z)
+# L_t = T - K(DK)_t*Z (DK 4.29)
 function get_L!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, Z::AbstractArray{U}, L1::AbstractArray{U}) where U <: AbstractFloat
+    copy!(L, T)
+    gemm!('N', 'N', -1.0, K, Z, 1.0, L)
+end
+
+# L = T(I - K'*Z)
+function get_L_alternative!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, Z::AbstractArray{U}, L1::AbstractArray{U}) where U <: AbstractFloat
     fill!(L1, 0.0)
-    for i = 1:size(L1, 1)
+    @inbounds @simd for i = 1:size(L1, 1)
         L1[i,i] = 1.0
     end
     gemm!('T', 'N', -1.0, K, Z, 1.0, L1)
@@ -151,13 +176,13 @@ end
 function get_L!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, z::AbstractArray{W}, L1::AbstractArray{U}) where {U <: AbstractFloat, W <: Integer}
     m, n = size(K)
     fill!(L1, 0.0)
-    for j = 1:m
+    @inbounds for j = 1:m
         zj = z[j]
-        for k=1:n
+        @simd for k=1:n
             L1[k, zj] = -K[j, k]
         end
     end
-    for i = 1:n
+    @inbounds @simd for i = 1:n
         L1[i,i] += 1.0
     end
     mul!(L, T, L1)
@@ -179,12 +204,12 @@ function get_M!(y::AbstractArray{T}, x::AbstractArray{T}, work::AbstractArray{T}
 end
 
 function get_prediction_error(Y::AbstractArray{T}, Z::AbstractArray{T}, a::AbstractVector{T}, i::U, t::U) where {T <: AbstractFloat, U <: Integer}
-        Zi = view(Z, i, :)
-        prediction_error = Y[i, t] - BLAS.dot(Zi, a)          # nu_{t,i} in 6.13 in DK (2012)
+    Zi = view(Z, i, :)
+    prediction_error = Y[i, t] - BLAS.dot(Zi, a)          # nu_{t,i} in 6.13 in DK (2012)
 end
 
 function get_prediction_error(Y::AbstractArray{T}, z::AbstractVector{U}, a::AbstractVector{T}, i::U, t::U) where {T <: AbstractFloat, U <: Integer}
-        prediction_error = Y[i, t] - a[z[i]]                  # nu_{t,i} in 6.13 in DK (2012)
+    prediction_error = Y[i, t] - a[z[i]]                  # nu_{t,i} in 6.13 in DK (2012)
 end
 
 function get_QQ!(c::AbstractMatrix{T}, a::AbstractMatrix{T}, b::AbstractMatrix{T}, work::Matrix{T}) where T <: AbstractFloat
@@ -201,7 +226,7 @@ end
 # v = y - Z*a -- basic -- univariate
 function get_v!(Y::AbstractVecOrMat{T}, Z::AbstractVecOrMat{T}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
     v = Y[i]
-    for j = 1:length(a)
+    @inbounds @simd for j = 1:length(a)
         v -= Z[i, j]*a[j]
     end
     return v
@@ -258,7 +283,7 @@ function get_Valpha!(V::AbstractArray{T}, P::AbstractArray{T}, N::AbstractArray{
 end
 
 # Vepsilon_t = H - H*D_t*H
-function get_Vepsilon!(Vepsilon, H, D, tmp)
+function get_Vepsilon!(Vepsilon::AbstractArray{T}, H::AbstractArray{T}, D::AbstractArray{T}, tmp::AbstractArray{T}) where T <: AbstractFloat
     copy!(Vepsilon, H)
     mul!(tmp, H, D)
     mul!(Vepsilon, tmp, H, -1.0, 1.0)
@@ -269,7 +294,7 @@ function get_Veta!(Veta, Q, R, N, RQ, tmp)
     copy!(Veta,  Q)
     mul!(RQ, R, Q)
     mul!(tmp, N, RQ)
-    mul!(Veta, RQ', tmp, -1.0, 1.0)
+    mul!(Veta, transpose(RQ), tmp, -1.0, 1.0)
 end
 
 function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, Z::AbstractMatrix{T}, pattern::AbstractVector{Int64}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
@@ -305,6 +330,13 @@ function update_a!(a1::AbstractArray{U}, a::AbstractArray, d::AbstractArray{U}, 
     a1 .+= d
 end
 
+# a = d + a + K'*v
+function filtered_a!(a1::AbstractArray{U}, a::AbstractArray{U}, d::AbstractArray{U}, K::AbstractArray{U}, v::AbstractArray{U}, work::AbstractArray{U}) where U <: AbstractFloat
+    a1 .= a
+    gemm!('T', 'N', 1.0, K, v, 1.0, a1)
+    a1 .+= d
+end
+
 # K = K + Z*W*M*W'
 function update_K!(K::AbstractArray{U}, ZWM::AbstractArray{U}, W::AbstractArray{U}) where U <: AbstractFloat
     gemm!('N', 'T', 1.0, ZWM, W, 1.0, K)
@@ -330,7 +362,6 @@ end
 
 # N_{t-1} = Z_t'iF_t*Z_t + L_t'N_t*L_t
 function update_N!(N1::AbstractArray{T}, Z::AbstractArray{T}, iFZ::AbstractArray{T}, L::AbstractArray{T}, N::AbstractArray{T}, Ptmp::AbstractArray{T}) where T <: AbstractFloat
-    copy!(N, N1)
     mul!(N1, transpose(Z), iFZ)
     mul!(Ptmp, transpose(L), N)
     gemm!('N', 'N', 1.0, Ptmp, L, 1.0, N1)
@@ -348,6 +379,19 @@ end
 function update_P!(P::AbstractArray{U}, T::AbstractArray{U}, QQ::AbstractArray{U}, K::AbstractArray{U}, ZP::AbstractArray{U}, Ptmp::AbstractArray{U}) where U <: AbstractFloat
     gemm!('T', 'N', -1.0, K, ZP, 1.0, P)
     mul!(Ptmp, T, P)
+    copy!(P, QQ)
+    gemm!('N', 'T', 1.0, Ptmp, T, 1.0, P)
+end
+
+# P = P - K'*Z*P
+function filtered_P!(P1::AbstractArray{U}, P::AbstractArray{U}, K::AbstractArray{U}, ZP::AbstractArray{U}, Ptmp::AbstractArray{U}) where U <: AbstractFloat
+    copy!(P1,P)
+    gemm!('T', 'N', -1.0, K, ZP, 1.0, P1)
+end
+
+# P = T*P*T'+ QQ
+function update_P!(P::AbstractArray{U}, P1::AbstractArray{U}, T::AbstractArray{U}, QQ::AbstractArray{U}, Ptmp::AbstractArray{U}) where U <: AbstractFloat
+    mul!(Ptmp, T, P1)
     copy!(P, QQ)
     gemm!('N', 'T', 1.0, Ptmp, T, 1.0, P)
 end
@@ -374,4 +418,3 @@ function update_W!(W::AbstractArray{U}, ZW::AbstractArray{U}, cholF::AbstractArr
     gemm!('T', 'N', -1.0, K, iFZW, 1.0, KtiFZW)
     mul!(W, T, KtiFZW)
 end
-

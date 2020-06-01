@@ -138,7 +138,7 @@ T = randn(ns, ns)
 K = randn(ny, ns)
 L = Matrix{Float64}(undef, ns, ns)
 L1 = similar(L)
-KalmanFilterTools.get_L!(L, T, K, Z, L1)
+KalmanFilterTools.get_L_alternative!(L, T, K, Z, L1)
 @test L ≈ T - T*K'*Z
 
 z = [1, 3, 2]
@@ -155,8 +155,9 @@ KalmanFilterTools.get_M!(M, cholF, ZW)
 
 # V_t = P_t - P_t*N_{t-1}*P_t
 V = Matrix{Float64}(undef, ns, ns)
-P = Matrix{Float64}(undef, ns, ns)
-N1 = Matrix{Float64}(undef, ns, ns)
+#P = Matrix{Float64}(undef, ns, ns)
+N1 = randn(ns, ns) #Matrix{Float64}(undef, ns, ns)
+N1 = N1'N1
 Ptmp = Matrix{Float64}(undef, ns, ns)
 KalmanFilterTools.get_Valpha!(V, P, N1, Ptmp)
 @test V ≈ P - P*N1*P

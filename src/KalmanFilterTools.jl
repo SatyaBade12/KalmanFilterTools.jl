@@ -45,7 +45,7 @@ struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     a1::Vector{T}
     K::Matrix{T}
     ZP::Matrix{T}
-    iFZ::SubArray{T}  
+    iFZ::SubArray{T}
     PTmp::Matrix{T}
     oldP::Matrix{T}
     lik::Vector{T}
@@ -55,7 +55,7 @@ struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     tmp_ns::Vector{T}
     PZi::Vector{T}
     kalman_tol::T
-    
+
     function KalmanLikelihoodWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
         csmall = Vector{T}(undef, ny)
         Zsmall = Matrix{T}(undef, ny, ns)
@@ -81,7 +81,7 @@ struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         tmp_ns = Vector{T}(undef, ns)
         PZi = Vector{T}(undef, ns)
         kalman_tol = 1e-12
-        
+
          new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, cholH, LTcholH,
             iFv, a1, K, ZP, iFZ, PTmp, oldP, lik, cholHset, ystar,
             Zstar, tmp_ns, PZi, kalman_tol)
@@ -131,7 +131,7 @@ function kalman_likelihood(Y::AbstractArray{U},
             get_iFv!(ws.iFv, ws.cholF, ws.v)
             ws.lik[t] = log(det_from_cholesky(ws.cholF)) + LinearAlgebra.dot(ws.v, ws.iFv)
             # K = iF*Z*P
-            get_K!(ws.K, ws.ZP, ws.cholF) 
+            get_K!(ws.K, ws.ZP, ws.cholF)
             # a = T(a + K'*v)
             update_a!(a, ws.K, ws.v, ws.a1, T)
             # P = T*(P - K'*Z*P)*T'+ QQ
@@ -182,7 +182,7 @@ function kalman_likelihood(Y::AbstractArray{U},
         viFv = view(ws.iFv, 1:ndata)
         vK = view(ws.K, 1:ndata, :)
         vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny)
-        
+
         # v  = Y[:,t] - Z*a
         get_v!(vv, Y, vZsmall, a, t, pattern)
         iy += ny
@@ -202,7 +202,7 @@ function kalman_likelihood(Y::AbstractArray{U},
             get_iFv!(viFv, vcholF, vv)
             ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF)) + LinearAlgebra.dot(vv, viFv)
             # K = iF*Z*P
-            get_K!(vK, vZP, vcholF) 
+            get_K!(vK, vZP, vcholF)
             # a = T(a + K'*v)
             update_a!(a, vK, vv, ws.a1, T)
             # P = T*(P - K'*Z*P)*T'+ QQ
@@ -325,7 +325,7 @@ function kalman_likelihood_monitored(Y::AbstractArray{U},
         vcholF = view(ws.cholF, 1:ndata, 1:ndata)
         viFv = view(ws.iFv, 1:ndata)
         vK = view(ws.K, 1:ndata, :)
-        
+
         # v  = Y[:,t] - Z*a
         get_v!(vv, Y, Z, a, t, pattern)
         iy += ny
@@ -396,7 +396,7 @@ struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     KtiFZW::Matrix{T}
     lik::Vector{T}
     kalman_tol::T
-    
+
     function FastKalmanLikelihoodWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
         csmall = Vector{T}(undef, ny)
         Zsmall = Matrix{T}(undef, ny, ns)
@@ -406,7 +406,7 @@ struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         F = Matrix{T}(undef, ny, ny)
         cholF = Matrix{T}(undef, ny, ny)
         v = Vector{T}(undef, ny)
-        
+
         iFv = Vector{T}(undef, ny)
         a1 = Vector{T}(undef, ns)
         K = Matrix{T}(undef, ny, ns)
@@ -455,7 +455,7 @@ function fast_kalman_likelihood(Y::Matrix{U},
     # W = T*K'
     mul!(ws.W, T, transpose(ws.K))
     # M = -iF
-    get_M!(ws.M, ws.cholF, ws.ZW) 
+    get_M!(ws.M, ws.cholF, ws.ZW)
     LIK = 0
     t = start
     iy = (start - 1)*ny + 1
@@ -514,7 +514,7 @@ function fast_kalman_likelihood(Y::Matrix{U},
     # W = T*K'
     mul!(ws.W, T, transpose(ws.K))
     # M = -iF
-    get_M!(ws.M, ws.cholF, ws.ZW) 
+    get_M!(ws.M, ws.cholF, ws.ZW)
     LIK = 0
     t = start
     iy = (start - 1)*ny + 1
@@ -533,7 +533,7 @@ function fast_kalman_likelihood(Y::Matrix{U},
         viFZWM = view(ws.iFZWM, 1:ndata, 1:ndata)
         vKtiFZW = view(ws.KtiFZW, :, 1:ndata)
         vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny)
-        
+
         # v  = Y[:,t] - Z*a
         get_v!(vv, Y, vZsmall, a, t, pattern)
         iy += ny
@@ -614,6 +614,8 @@ struct DiffuseKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     end
 end
 
+DiffuseKalmanLikelihoodWs(ny, ns, np, nobs) = DiffuseKalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
+
 function diffuse_kalman_likelihood_init!(Y::Matrix{U},
                                          Z::AbstractArray{W},
                                          H::Matrix{U},
@@ -628,11 +630,10 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
                                          ws::KalmanWs) where {U <: AbstractFloat,
                                                               V <: Integer,
                                                               W <: Real}
-    
+
     ny = size(Y, 1)
     t = start
-    LIK = 0
-    iy = (start - 1)*ny + 1 
+    iy = (start - 1)*ny + 1
     diffuse_kalman_tol = 1e-8
     kalman_tol = 1e-8
     while t <= last
@@ -692,7 +693,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
                                          data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat,
                                                                                  V <: Integer,
                                                                                  W <: Real}
-    
+
     ny = size(Y, 1)
     t = start
     LIK = 0
@@ -713,7 +714,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
         vK = view(ws.K, 1:ndata, :)
         vKstar = view(ws.Kstar, 1:ndata, :)
         vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny)
-        
+
         # v  = Y[:,t] - Z*a
         get_v!(vv, Y, vZsmall, a, t, pattern)
         iy += ny
@@ -759,7 +760,7 @@ function diffuse_kalman_likelihood(Y::Matrix{U},
                                    Z::AbstractArray{W},
                                    H::Matrix{U},
                                    T::Matrix{U},
-                                   R::Matrix{U},     
+                                   R::Matrix{U},
                                    Q::Matrix{U},
                                    a::Vector{U},
                                    Pinf::Matrix{U},
@@ -790,7 +791,7 @@ function diffuse_kalman_likelihood(Y::Matrix{U},
                                    Z::AbstractArray{W},
                                    H::Matrix{U},
                                    T::Matrix{U},
-                                   R::Matrix{U},     
+                                   R::Matrix{U},
                                    Q::Matrix{U},
                                    a::Vector{U},
                                    Pinf::Matrix{U},
@@ -844,7 +845,7 @@ function kalman_filter!(Y::AbstractArray{U},
     changeQ = ndims(Q) > 2
     changeA = ndims(a) > 1
     changeP = ndims(P) > 2
-    
+
     ny = size(Y, 1)
     nobs = last - start + 1
     ns = size(T,1)
@@ -887,7 +888,7 @@ function kalman_filter!(Y::AbstractArray{U},
         vcholF = view(ws.cholF, 1:ndata, 1:ndata, 1)
         viFv = view(ws.iFv, 1:ndata)
         vK = view(ws.K, 1:ndata, :, 1)
-        
+
         # v  = Y[:,t] - c - Z*a
         get_v!(vv, Y, vc, vZsmall, va, t, pattern)
         iy += ny
@@ -945,32 +946,34 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     iZsmall::Vector{U}
     RQ::Matrix{T}
     QQ::Matrix{T}
-    v::Vector{T}
+    v::Matrix{T}
     F::Matrix{T}
-    cholF::Array{T}
-    iF::Matrix{T}
+    cholF::Matrix{T}
+    iF::Array{T}
     iFv::Matrix{T}
     r::Vector{T}
     r1::Vector{T}
-    a1::Vector{T}
-    K::Array{T}
+    at_t::Matrix{T}
+    K::Matrix{T}
+    KDK::Matrix{T}
     L::Matrix{T}
     L1::Matrix{T}
     N::Matrix{T}
     N1::Matrix{T}
     ZP::Matrix{T}
-    B::Array{T}
+    Pt_t::Matrix{T}
     Kv::Matrix{T}
-    iFZ::Array{T}  
+    iFZ::Matrix{T}
     PTmp::Matrix{T}
     oldP::Matrix{T}
     lik::Vector{T}
+    KT::Matrix{T}
+    D::Matrix{T}
     tmp_np::Vector{T}
     tmp_ns::Vector{T}
     tmp_ny::Vector{T}
     tmp_ns_np::AbstractArray{T}
     tmp_ny_ny::AbstractArray{T}
-    
 
     function KalmanSmootherWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
         csmall = Vector{T}(undef, ny)
@@ -979,34 +982,37 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
         RQ = Matrix{T}(undef, ns, np)
         QQ = Matrix{T}(undef, ns, ns)
         F = Matrix{T}(undef, ny, ny)
-        cholF = Array{T}(undef, ny, ny, nobs)
-        iF = Matrix{T}(undef, ny, ny)
-        v = Vector{T}(undef, ny)
+        cholF = Matrix{T}(undef, ny, ny)
+        iF = Array{T}(undef, ny, ny, nobs)
+        v = Matrix{T}(undef, ny, nobs)
         iFv = Matrix{T}(undef, ny, nobs)
-        r = Vector{T}(undef, ns)
-        r1 = Vector{T}(undef, ns)
-        a1 = Vector{T}(undef, ns)
+        r = zeros(T, ns)
+        r1 = zeros(T, ns)
+        at_t = zeros(T, ns, nobs)
         K = Array{T}(undef, ny, ns, nobs)
+        KDK = Array{T}(undef, ny, ns, nobs)
         L = Matrix{T}(undef, ns, ns)
         L1 = Matrix{T}(undef, ns, ns)
-        N = Matrix{T}(undef, ns, ns)
-        N1 = Matrix{T}(undef, ns, ns)
+        N = zeros(T, ns, ns)
+        N1 = zeros(T, ns, ns)
         Kv = Matrix{T}(undef, ns, nobs)
-        B = Array{T}(undef, ns, ns, nobs)
+        Pt_t = zeros(T, ns, ns, nobs)
         PTmp = Matrix{T}(undef, ns, ns)
         oldP = Matrix{T}(undef, ns, ns)
         ZP = Matrix{T}(undef, ny, ns)
         iFZ = Matrix{T}(undef, ny, ns)
         lik = Vector{T}(undef, nobs)
+        KT = Matrix{T}(undef, ny, ns)
+        D = Matrix{T}(undef, ny, ny)
         tmp_np = Vector{T}(undef, np)
         tmp_ns = Vector{T}(undef, ns)
         tmp_ny = Vector{T}(undef, ny)
         tmp_ns_np = Matrix{T}(undef, ns, np)
         tmp_ny_ny = Matrix{T}(undef, ny, ny)
-        
+
         new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, iF,
-            iFv, r, r1, a1, K, L, L1, N, N1, ZP, B, Kv,
-            iFZ, PTmp, oldP, lik, tmp_np, tmp_ns,
+            iFv, r, r1, at_t, K, KDK, L, L1, N, N1, ZP, Pt_t, Kv,
+            iFZ, PTmp, oldP, lik, KT, D, tmp_np, tmp_ns,
             tmp_ny, tmp_ns_np, tmp_ny_ny)
     end
 end
@@ -1037,97 +1043,100 @@ function kalman_filter_2!(Y::AbstractArray{U},
     changeQ = ndims(Q) > 2
     changeA = ndims(a) > 1
     changeP = ndims(P) > 2
-    
+
     ny = size(Y,1)
     nobs = last - start + 1
     ns = size(T,1)
     # QQ = R*Q*R'
     vR = view(R, :, :, 1)
     vQ = view(Q, :, :, 1)
+    va = view(a,:)
+    vP = view(P, :, :)
     get_QQ!(ws.QQ, vR, vQ, ws.RQ)
     l2pi = log(2*pi)
     fill!(ws.lik, 0.0)
     t = start
-    iy = (start - 1)*ny + 1
     steady = false
-    vP = view(P, :, :, 1)
-    copy!(ws.oldP, vP)
-    cholHset = false
+#    copy!(ws.oldP, vP)
     while t <= last
-
+        #inputs
         pattern = data_pattern[t]
         ndata = length(pattern)
         vc = changeC ? view(c, pattern, t) : view(c, pattern)
         vZ = changeZ ? view(Z, :, :, t) : view(Z, :, :)
         vH = changeH ? view(H, :, :, t) : view(H, :, :)
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
-        vR = changeR ? view(R, :, :, t) : view(R, :, :)
-        vQ = changeR ? view(Q, :, :, t) : view(Q, :, :)
-        va = changeA ? view(a, :, t) : view(a, :)
-        va1 = changeA ? view(a, :, t + 1) : view(a, :)
         vd = changeD ? view(d, :, t) : view(d, :)
-        vP = changeP ? view(P, :, :, t) : view(P, :, :)
-        vP1 = changeP ? view(P, :, :, t + 1) : view(P, :, :)
         if changeR || changeQ
+            vR = view(R, :, :, t)
+            vQ = view(Q, :, :, t)
             get_QQ!(ws.QQ, vR, vQ, ws.RQ)
         end
-        vv = view(ws.v, 1:ndata)
+        # outputs
+        vat = view(ws.at_t, :, t)
+        vPt = view(ws.Pt_t, :, :, t)
+        vv = view(ws.v, 1:ndata, t)
         vF = view(ws.F, 1:ndata, 1:ndata)
         vZP = view(ws.ZP, 1:ndata, :)
-        vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
+        vcholF = view(ws.cholF, 1:ndata, 1:ndata)
+        viF = view(ws.iF, 1:ndata, 1:ndata, t)
         viFv = view(ws.iFv, 1:ndata, t)
         vK = view(ws.K, 1:ndata, :, t)
-        
+        vKDK = view(ws.KDK, 1:ndata, :, t) # Kalman Filter Gain according to Durbin & Koopman (4.22)
+
         # v  = Y[:,t] - c - Z*a
         get_v!(vv, Y, vc, vZ, va, t, pattern)
-        iy += ny
-        if !steady
+#        iy += ny
+#        if !steady
             # F  = Z*P*Z' + H
-            get_F!(vF, vZP, vZ, vP, vH)
-            info = get_cholF!(vcholF, ws.F)
+            # builds also ZP
+        get_F!(vF, vZP, vZ, vP, vH)
+            info = get_cholF!(vcholF, vF)
             if info != 0
                 # F is near singular
                 if !cholHset
                     get_cholF!(ws.cholH, H)
                     cholHset = true
                 end
-                ws.lik[t] = univariate_step!(Y, t, vZ, vH, T, ws.QQ, a, P, ws.kalman_tol, ws)
+                ws.lik[t] = univariate_step!(Y, t, vZ, vH, vT, ws.QQ, a, P, ws.kalman_tol, ws)
                 t += 1
                 continue
             end
-        end
+#        end
         # iFv = inv(F)*v
-        get_iFv!(viFv, vcholF, vv)
-        ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF)) + LinearAlgebra.dot(vv, viFv)
-        if t <= last
-            if !steady
+        get_iF!(viF, vcholF)
+        mul!(viFv,viF,vv)
+#        get_iFv!(viFv, vcholF, vv)
+        ws.lik[t] = -.5*ndata*l2pi -.5*log(det_from_cholesky(vcholF)) -.5*LinearAlgebra.dot(vv, viFv)
+#        if t <= last
+#            if !steady
                 # K = iF*ZP
-                get_K!(vK, vZP, vcholF)
-                # L = T(I - K'*Z)
-                #get_L!(ws.L, vT, vK, vZ) 
-            end
-            # a = d + T*a + K'*v
-            update_a!(va1, va, vd, vK, vv, ws.a1, vT)
-            if !steady
-                # P = T*(P - K'*Z*P)*T'+ QQ
-                copy!(vP1, vP)
-                update_P!(vP1, vT, ws.QQ, vK, vZP, ws.PTmp)
+            mul!(vK,viF,vZP)
+                # amounts to K_t in DK (4.22): here KDK = T*K'
+            mul!(vKDK,vT,transpose(vK))
+#            end
+            # a{t_t} = d + a_t + K'*v
+            filtered_a!(vat, va, vd, vK, vv, ws.tmp_ns)
+            # a_{t+1} = T a_{t_t}
+            mul!(va,vT,vat)
+#            if !steady
+                # P_{t|t} = P_t - K'*Z*P_t
+            filtered_P!(vPt, vP, vK, vZP, ws.PTmp)
+                # P_{t+1} = T*P_{t|t}*T'+ QQ
+            update_P!(vP, vPt, vT, ws.QQ, ws.PTmp)
+
+#=
                 ws.oldP .-= vP1
                 if norm(ws.oldP) < ns*eps()
                     steady = true
                 else
                     copy!(ws.oldP, vP)
                 end
-            end
-        end
+=#
+#            end
+#        end
         t += 1
     end
-    @inbounds if presample > 0
-        LIK = -0.5*(sum(view(ws.lik,(presample+1):nobs)))
-    else
-        LIK = -0.5*(sum(ws.lik))
-    end
-    LIK
 end
 
 function kalman_smoother!(Y::AbstractArray{U},
@@ -1139,10 +1148,10 @@ function kalman_smoother!(Y::AbstractArray{U},
                           R::AbstractArray{U},
                           Q::AbstractArray{U},
                           a::AbstractArray{U},
+                          P::AbstractArray{U},
                           alphah::AbstractArray{U},
                           epsilonh::AbstractArray{U},
                           etah::AbstractArray{U},
-                          P::AbstractArray{U},
                           Valpha::AbstractArray{U},
                           Vepsilon::AbstractArray{U},
                           Veta::AbstractArray{U},
@@ -1162,72 +1171,94 @@ function kalman_smoother!(Y::AbstractArray{U},
     changeA = ndims(a) > 1
     changeP = ndims(P) > 2
 
-    kalman_filter_2!(Y,c, Z, H, d, T, R, Q, a, 
+    kalman_filter_2!(Y,c, Z, H, d, T, R, Q, a,
                      P, start, last, presample, ws,
                      data_pattern)
 
-    fill!(ws.r, 0.0)
-    fill!(ws.N, 0.0)
+    fill!(ws.r1,0.0)
+    fill!(ws.N1,0.0)
 
     for t = last: -1: 1
-
+        #inputs
         pattern = data_pattern[t]
         ndata = length(pattern)
         vZ = changeZ ? view(Z, :, :, t) : view(Z, :, :)
         vH = changeH ? view(H, :, :, t) : view(H, :, :)
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
-        va = changeA ? view(a, :, t) : view(a, :)
-        vP = changeP ? view(P, :, :, t) : view(P, :, :)
+        va = view(ws.at_t, :, t)
+        vP = view(ws.Pt_t, :, :, t)
         vQ = changeQ ? view(Q, :, :, t) : view(Q, :, :)
         vR = changeR ? view(R, :, :, t) : view(R, :, :)
+        vKDK = view(ws.KDK, 1:ndata, :, t) # amounts to K_t (4.22): here KDK = T*K'
+        viF = view(ws.iF, 1:ndata, 1:ndata, t)
         viFv = view(ws.iFv, 1:ndata, t)
-        vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
-        vK = view(ws.K, 1:ndata, :, t)
-        
-        # L = T(I - K'*Z)
-        get_L!(ws.L, vT, vK, Z, ws.L1)
-        # r_{t-1} = Z_t'*iF_t*v_t + L_t'r_t
+
+        # L_t = T - KDK_t*Z (DK 4.29)
+        get_L!(ws.L, vT, vKDK, vZ, ws.L1)
+        # r_{t-1} = Z_t'*iF_t*v_t + L_t'r_t (DK 4.44)
         update_r!(ws.r, vZ, viFv, ws.L, ws.r1)
+        if (length(alphah) > 0 ||
+            length(epsilonh) > 0 ||
+            length(etah) > 0)
+            # N_{t-1} = Z_t'iF_t*Z_t + L_t'N_t*L_t (DK 4.44)
+            mul!(ws.iFZ,viF,vZ)
+            update_N!(ws.N, vZ, ws.iFZ, ws.L, ws.N1, ws.PTmp)
+        end
         if length(epsilonh) > 0
             vepsilonh = view(epsilonh, :, t)
-            # epsilon_h = H*(iF_t*v_t - K_t*T*r_t)
-            get_epsilonh!(vepsilonh, vH, ws.iFv, vK, vT, ws.r, ws.tmp_ny, ws.tmp_ns) 
+            # epsilon_t = H*(iF_t*v_t - KDK_t'*r_t) (DK 4.69)
+            get_epsilonh!(vepsilonh, vH, viFv, vKDK, ws.r1, ws.tmp_ny, ws.tmp_ns)
             if length(Vepsilon) > 0
-                vValpha = view(Valpha, :, :, t)
-                # D = inv(F_t) + K_t*T*N_t*T'*K'
-                get_iF!(ws.iF, vcholF)
-                get_D!(ws.D, ws.iF, vK, vT, ws.N, ws.KT, ws.tmp_ns_np)
-                # Vepsilon_t = H - H*D_t*H
+                vVepsilon = view(Vepsilon,:,:,t)
+                # D_t = inv(F_t) + KDK_t'*N_t*KDK_t (DK 4.69)
+                get_D!(ws.D, viF, vKDK,  ws.N1, ws.tmp_ns_np)
+                # Vepsilon_t = H - H*D_t*H (DK 4.69)
                 get_Vepsilon!(vVepsilon, vH, ws.D, ws.tmp_ny_ny)
             end
         end
         if length(etah) > 0
             vetah = view(etah, :, t)
-            # etah = Q*R'*r_t
-            get_etah!(vetah, vQ, vR, ws.r, ws.tmp_np)
+            # eta_t = Q*R'*r_t (DK 4.69)
+            get_etah!(vetah, vQ, vR, ws.r1, ws.tmp_np)
             if length(Veta) > 0
                 vVeta = view(Veta, :, :, t)
-                # Veta_t = Q - Q*R'*N_t*R*Q
-                get_Veta!(vVeta, vQ, vR, ws.N, ws.RQ, ws.tmp_ns_np)
+                # Veta_t = Q - Q*R'*N_t*R*Q (DK 4.69)
+                get_Veta!(vVeta, vQ, vR, ws.N1, ws.RQ, ws.tmp_ns_np)
             end
         end
-        if (length(alphah) > 0 ||
-            length(epsilonh) > 0 ||
-            lengthe(etah) > 0)
-            # N_{t-1} = Z_t'iF_t*Z_t + L_t'N_t*L_t
-            get_iFZ!(ws.iFZ, vcholF, vZ)
-            update_N!(ws.N, vZ, ws.iFZ, ws.L, ws.N1, ws.PTmp)
-        end
+
         if length(alphah) > 0
             valphah = view(alphah, :, t)
-            # alphah_t = a_t + P_t*r_{t-1}
-            get_alphah!(valphah, va, vP, ws.r)
-            if length(Valpha) > 0
-                vValpha = view(Valpha, :, :, t)
-                # Valpha_t = P_t - P_t*N_{t-1}*P_t
-                get_Valpha!(vValpha, vP, ws.N, ws.PTmp)
+            if t==last
+                valphah .= va
+            else
+                # alphah_t = a_t + P_t*r_{t-1} (DK 4.44)
+                get_alphah!(valphah, va, vP, ws.r1)
             end
         end
+        if length(Valpha) > 0
+            vValpha = view(Valpha, :, :, t)
+            if t==last
+                copy!(vValpha,vP)
+            else
+                # Valpha_t = P_t - P_t*N_{t-1}*P_t (DK 4.44)
+                get_Valpha!(vValpha, vP, ws.N1, ws.PTmp)
+            end
+        end
+#=
+        if length(alphah) > 0
+            valphah = view(alphah, :, t)
+            # alphah_t = a_t + P_t*r_{t-1} (DK 4.44)
+            get_alphah!(valphah, va, vP, ws.r)
+        end
+        if length(Valpha) > 0
+            vValpha = view(Valpha, :, :, t)
+            # Valpha_t = P_t - P_t*N_{t-1}*P_t (DK 4.44)
+            get_Valpha!(vValpha, vP, ws.N, ws.PTmp)
+        end
+=#
+        copy!(ws.r1,ws.r)
+        copy!(ws.N1,ws.N)
     end
 end
 
