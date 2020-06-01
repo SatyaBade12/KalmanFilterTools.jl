@@ -1020,7 +1020,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
         r1 = zeros(T, ns)
         at_t = zeros(T, ns, nobs)
         K = Array{T}(undef, ny, ns, nobs)
-        KDK = Array{T}(undef, ny, ns, nobs)
+        KDK = Array{T}(undef, ns, ny, nobs)
         L = Matrix{T}(undef, ns, ns)
         L1 = Matrix{T}(undef, ns, ns)
         N = zeros(T, ns, ns)
