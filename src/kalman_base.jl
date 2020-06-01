@@ -50,9 +50,6 @@ function get_epsilonh!(epsilon::AbstractVector{U}, H::AbstractMatrix{U},
                        tmp2::AbstractVector{U}) where U <: AbstractFloat
     copy!(tmp1, iFv)
     mul!(tmp1, transpose(K), r, -1.0, 1.0)
-    @show epsilon
-    @show H
-    @show tmp1
     mul!(epsilon, H, tmp1)
 end
 

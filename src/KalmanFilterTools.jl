@@ -1001,6 +1001,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     tmp_ny::Vector{T}
     tmp_ns_np::AbstractArray{T}
     tmp_ny_ny::AbstractArray{T}
+    tmp_ny_np::AbstractArray{T}
     kalman_tol::T
     
     function KalmanSmootherWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
@@ -1043,12 +1044,14 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
         tmp_ny = Vector{T}(undef, ny)
         tmp_ns_np = Matrix{T}(undef, ns, np)
         tmp_ny_ny = Matrix{T}(undef, ny, ny)
+        tmp_ny_np = Matrix{T}(undef, ny, np)
         kalman_tol = 1e-12
 
         new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, cholH, iF,
             iFv, a1, r, r1, at_t, K, KDK, L, L1, N, N1, ZP, Pt_t, Kv,
             iFZ, PTmp, oldP, lik, KT, D, ystar, Zstar, Hstar, PZi,
-            tmp_np, tmp_ns, tmp_ny, tmp_ns_np, tmp_ny_ny, kalman_tol)
+            tmp_np, tmp_ns, tmp_ny, tmp_ns_np, tmp_ny_ny, tmp_ny_np,
+            kalman_tol)
     end
 end
 
@@ -1247,7 +1250,7 @@ function kalman_smoother!(Y::AbstractArray{U},
             if length(Vepsilon) > 0
                 vVepsilon = view(Vepsilon,:,:,t)
                 # D_t = inv(F_t) + KDK_t'*N_t*KDK_t (DK 4.69)
-                get_D!(ws.D, viF, vKDK,  ws.N1, ws.tmp_ns_np)
+                get_D!(ws.D, viF, vKDK,  ws.N1, ws.tmp_ny_np)
                 # Vepsilon_t = H - H*D_t*H (DK 4.69)
                 get_Vepsilon!(vVepsilon, vH, ws.D, ws.tmp_ny_ny)
             end
