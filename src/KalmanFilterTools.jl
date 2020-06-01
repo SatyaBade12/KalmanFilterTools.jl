@@ -1168,8 +1168,8 @@ function kalman_smoother!(Y::AbstractArray{U},
     changeT = ndims(T) > 2
     changeR = ndims(R) > 2
     changeQ = ndims(Q) > 2
-    changeA = ndims(a) > 1
-    changeP = ndims(P) > 2
+#    changeA = ndims(a) > 1
+#    changeP = ndims(P) > 2
 
     kalman_filter_2!(Y,c, Z, H, d, T, R, Q, a,
                      P, start, last, presample, ws,
