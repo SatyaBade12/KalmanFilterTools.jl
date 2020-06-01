@@ -975,7 +975,8 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     tmp_ny::Vector{T}
     tmp_ns_np::AbstractArray{T}
     tmp_ny_ny::AbstractArray{T}
-
+    kalman_tol::T
+    
     function KalmanSmootherWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
         csmall = Vector{T}(undef, ny)
         Zsmall = Matrix{T}(undef, ny, ns)
@@ -1011,11 +1012,12 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
         tmp_ny = Vector{T}(undef, ny)
         tmp_ns_np = Matrix{T}(undef, ns, np)
         tmp_ny_ny = Matrix{T}(undef, ny, ny)
+        kalman_tol = 1e-12
 
         new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, cholH, iF,
             iFv, r, r1, at_t, K, KDK, L, L1, N, N1, ZP, Pt_t, Kv,
             iFZ, PTmp, oldP, lik, KT, D, tmp_np, tmp_ns,
-            tmp_ny, tmp_ns_np, tmp_ny_ny)
+            tmp_ny, tmp_ns_np, tmp_ny_ny, kalman_tol)
     end
 end
 
