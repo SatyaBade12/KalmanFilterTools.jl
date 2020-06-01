@@ -1052,6 +1052,7 @@ function kalman_filter_2!(Y::AbstractArray{U},
     steady = false
     vP = view(P, :, :, 1)
     copy!(ws.oldP, vP)
+    cholHset = false
     while t <= last
 
         pattern = data_pattern[t]
