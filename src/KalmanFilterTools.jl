@@ -1225,7 +1225,7 @@ function kalman_smoother!(Y::AbstractArray{U},
         vP = view(ws.Pt_t, :, :, t)
         vQ = changeQ ? view(Q, :, :, t) : view(Q, :, :)
         vR = changeR ? view(R, :, :, t) : view(R, :, :)
-        vKDK = view(ws.KDK, 1:ndata, :, t) # amounts to K_t (4.22): here KDK = T*K'
+        vKDK = view(ws.KDK, :, 1:ndata, t) # amounts to K_t (4.22): here KDK = T*K'
         viF = view(ws.iF, 1:ndata, 1:ndata, t)
         viFv = view(ws.iFv, 1:ndata, t)
 
