@@ -1046,7 +1046,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
         kalman_tol = 1e-12
 
         new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, cholH, iF,
-            a1, iFv, r, r1, at_t, K, KDK, L, L1, N, N1, ZP, Pt_t, Kv,
+            iFv, a1, r, r1, at_t, K, KDK, L, L1, N, N1, ZP, Pt_t, Kv,
             iFZ, PTmp, oldP, lik, KT, D, ystar, Zstar, Hstar, PZi,
             tmp_np, tmp_ns, tmp_ny, tmp_ns_np, tmp_ny_ny, kalman_tol)
     end
