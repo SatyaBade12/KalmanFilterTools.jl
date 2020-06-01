@@ -399,6 +399,7 @@ struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     ystar::Vector{T}
     Zstar::Matrix{T}
     Hstar::Matrix{T}
+    PZi::Vector{T}
     lik::Vector{T}
     kalman_tol::T
 
@@ -427,10 +428,11 @@ struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         ystar = Vector{T}(undef, ny)
         Zstar = Matrix{T}(undef, ny, ns)
         Hstar = Matrix{T}(undef, ny, ny)
+        PZi = Vector{T}(undef, ns)
         lik = Vector{T}(undef, nobs)
         kalman_tol = 1e-12
         new(csmall, Zsmall, iZsmall, QQ, v, F, cholF, iFv, a1, K, RQ, ZP, M, W,
-            ZW, ZWM, iFZWM, TW, iFZW, KtiFZW, ystar, Ztar, Hstar, lik, kalman_tol)
+            ZW, ZWM, iFZWM, TW, iFZW, KtiFZW, ystar, Ztar, Hstar, PZi, lik, kalman_tol)
     end
 end
 
@@ -596,6 +598,7 @@ struct DiffuseKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     ystar::Vector{T}
     Zstar::Matrix{T}
     Hstar::Matrix{T}
+    PZi::Vector{T}
     lik::Vector{T}
     kalman_tol::T
     function DiffuseKalmanLikelihoodWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
@@ -623,11 +626,12 @@ struct DiffuseKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         ystar = Vector{T}(undef, ny)
         Zstar = Matrix{T}(undef, ny, ns)
         Hstar = Matrix{T}(undef, ny, ny)
+        PZi = Vector{T}(undef, ns)
         lik = zeros(T, nobs)
         kalman_tol = 1e-12
         new(csmall, Zsmall, iZsmall, QQ, RQ, v, F, iF, iFv, a1, cholF, ZP, Fstar,
             ZPstar, K, iFZ, Kstar, PTmp, uKinf, uKstar, Kinf_Finf, ystar, Zstar, Hstar,
-            lik, kalman_tol)
+            PZI, lik, kalman_tol)
     end
 end
 
@@ -990,6 +994,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     ystar::Vector{T}
     Zstar::Matrix{T}
     Hstar::Matrix{T}
+    PZi::Vector{T}
     tmp_np::Vector{T}
     tmp_ns::Vector{T}
     tmp_ny::Vector{T}
@@ -1030,6 +1035,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
         ystar = Vector{T}(undef, ny)
         Zstar = Matrix{T}(undef, ny, ns)
         Hstar = Matrix{T}(undef, ny, ny)
+        PZi = Vector{T}(undef, ns)
         tmp_np = Vector{T}(undef, np)
         tmp_ns = Vector{T}(undef, ns)
         tmp_ny = Vector{T}(undef, ny)
@@ -1039,8 +1045,8 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
 
         new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, cholH, iF,
             iFv, r, r1, at_t, K, KDK, L, L1, N, N1, ZP, Pt_t, Kv,
-            iFZ, PTmp, oldP, lik, KT, D, ystar, Zstar, Hstar, tmp_np,
-            tmp_ns, tmp_ny, tmp_ns_np, tmp_ny_ny, kalman_tol)
+            iFZ, PTmp, oldP, lik, KT, D, ystar, Zstar, Hstar, PZi,
+            tmp_np, tmp_ns, tmp_ny, tmp_ns_np, tmp_ny_ny, kalman_tol)
     end
 end
 
