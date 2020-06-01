@@ -949,6 +949,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     v::Matrix{T}
     F::Matrix{T}
     cholF::Matrix{T}
+    cholH::Matrix{T}
     iF::Array{T}
     iFv::Matrix{T}
     r::Vector{T}
@@ -983,6 +984,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
         QQ = Matrix{T}(undef, ns, ns)
         F = Matrix{T}(undef, ny, ny)
         cholF = Matrix{T}(undef, ny, ny)
+        cholH = Matrix{T}(undef, ny, ny)
         iF = Array{T}(undef, ny, ny, nobs)
         v = Matrix{T}(undef, ny, nobs)
         iFv = Matrix{T}(undef, ny, nobs)
@@ -1010,7 +1012,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
         tmp_ns_np = Matrix{T}(undef, ns, np)
         tmp_ny_ny = Matrix{T}(undef, ny, ny)
 
-        new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, iF,
+        new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, cholH, iF,
             iFv, r, r1, at_t, K, KDK, L, L1, N, N1, ZP, Pt_t, Kv,
             iFZ, PTmp, oldP, lik, KT, D, tmp_np, tmp_ns,
             tmp_ny, tmp_ns_np, tmp_ny_ny)
