@@ -401,7 +401,7 @@ struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         lik = Vector{T}(undef, nobs)
         kalman_tol = 1e-12
         new(csmall, Zsmall, iZsmall, QQ, v, F, cholF, iFv, a1, K, RQ, ZP, M, W,
-            ZW, ZWM, iFZWM, TW, iFZW, KtiFZW, ystar, Ztar, Hstar, PZi, lik, kalman_tol)
+            ZW, ZWM, iFZWM, TW, iFZW, KtiFZW, ystar, Zstar, Hstar, PZi, lik, kalman_tol)
     end
 end
 
@@ -600,7 +600,7 @@ struct DiffuseKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
         kalman_tol = 1e-12
         new(csmall, Zsmall, iZsmall, QQ, RQ, v, F, iF, iFv, a1, cholF, ZP, Fstar,
             ZPstar, K, iFZ, Kstar, PTmp, uKinf, uKstar, Kinf_Finf, ystar, Zstar, Hstar,
-            PZI, lik, kalman_tol)
+            PZi, lik, kalman_tol)
     end
 end
 
