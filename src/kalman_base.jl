@@ -297,22 +297,28 @@ function get_Veta!(Veta, Q, R, N, RQ, tmp)
     mul!(Veta, transpose(RQ), tmp, -1.0, 1.0)
 end
 
-function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, Z::AbstractMatrix{T}, pattern::AbstractVector{Int64}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, Z::AbstractArray{T}, pattern::AbstractVector{U}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+    changeZ = ndims(Z) > 2
+    vZ = changeZ ? view(Z, :, :, t) : view(Z, :, :)
     vZsmall = view(Zsmall, 1:n, :)
     if n == ny
-        copyto!(vZsmall, Z)
+        copyto!(vZsmall, vZ)
     else
-        vZsmall .= view(Z, pattern, :)
+        vZsmall .= view(vZ, pattern, :)
     end
+    return vZsmall
 end
 
-function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, Z::AbstractVector{Int64}, pattern::AbstractVector{Int64}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, z::AbstractArray{U}, pattern::AbstractVector{U}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+    changeZ = ndims(z) > 1
+    vz = changeZ ? view(z, :, t) : view(z, :,)
     vZsmall = view(iZsmall, 1:n)
     if n == ny
-        copyto!(vZsmall, Z)
+        copyto!(vZsmall, vz)
     else
         vZsmall .= view(Z, pattern)
     end
+    return vZsmall
 end
 
 # a = T(a + K'*v)
@@ -394,6 +400,24 @@ function update_P!(P::AbstractArray{U}, P1::AbstractArray{U}, T::AbstractArray{U
     mul!(Ptmp, T, P1)
     copy!(P, QQ)
     gemm!('N', 'T', 1.0, Ptmp, T, 1.0, P)
+end
+
+# Pstar  = T*(Pstar-Pstar*Z'*Kinf-Pinf*Z'*Kstar)*T'+QQ;         %(5.14) DK(2012)
+function update_Pstar!(Pstar1, Pstar, T, ZPinf, ZPstar, Kinf, Kstar, QQ, PTmp)
+    copy!(PTmp, Pstar)
+    mul!(PTmp, transpose(ZPstar), Kinf, -1.0, 1.0)
+    mul!(PTmp, transpose(ZPinf), Kstar, -1.0, 1.0)
+    copy!(Pstar, PTmp)
+    mul!(PTmp, T, Pstar)
+    copy!(Pstar1, QQ)
+    mul!(Pstar1, PTmp, transpose(T), 1.0, 1.0)
+end
+
+# Pinf   = T*(Pinf-Pinf*Z'*Kinf)*T';                             %(5.14) DK(2012)
+function update_Pinf!(Pinf1, Pinf, T, ZPinf, Kinf, PTmp)
+    mul!(Pinf, transpose(ZPinf), Kinf, -1.0, 1.0) 
+    mul!(PTmp, T, Pinf)
+    mul!(Pinf1, PTmp, transpose(T))
 end
 
 # r_{t-1} = Z_t'*iF_t*v_t + L_t'r_t

@@ -330,5 +330,25 @@ ZW = randn(ny, ny)
 gemm!('N', 'T', 1.0, ZWM, ZW, 1.0,F)
 @test F ≈ F_0 + ZWM*ZW'
 
+# Pstar  = T*(Pstar-Pstar*Z'*Kinf-Pinf*Z'*Kstar)*T'+QQ;         %(5.14) DK(2012)
+Pstar = randn(ns, ns)
+PstarOrig = copy(Pstar)
+T = randn(ns, ns)
+ZPinf = randn(ny, ns)
+ZPstar = randn(ny, ns)
+Kinf = randn(ny, ns)
+Kstar = randn(ny, ns)
+QQ = randn(ns, ns)
+PTmp = randn(ns, ns)
+KalmanFilterTools.update_Pstar!(Pstar, T, ZPinf, ZPstar, Kinf, Kstar, QQ, PTmp)
+@test Pstar ≈ T*(PstarOrig-ZPstar'*Kinf-ZPinf'*Kstar)*T'+QQ
 
-
+# Pinf   = T*(Pinf-Pinf*Z'*Kinf)*T';                             %(5.14) DK(2012)
+Pinf = randn(ns, ns)
+PinfOrig = copy(Pinf)
+T = randn(ns, ns)
+ZPinf = randn(ny, ns)
+Kinf = randn(ny,ns)
+PTmp = randn(ns, ns)
+KalmanFilterTools.update_Pinf!(Pinf, T, ZPinf, Kinf, PTmp)
+@test Pinf ≈ T*(PinfOrig - ZPinf'*Kinf)*T'

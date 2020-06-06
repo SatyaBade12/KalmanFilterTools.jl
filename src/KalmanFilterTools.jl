@@ -23,6 +23,7 @@ using LinearAlgebra
 using LinearAlgebra.BLAS
 
 export KalmanLikelihoodWs, FastKalmanLikelihoodWs, DiffuseKalmanLikelihoodWs
+export DiffuseKalmanFilterWs
 export KalmanSmootherWs, kalman_likelihood, kalman_likelihood_monitored
 export fast_kalman_likelihood, diffuse_kalman_likelihood, kalman_filter!
 export kalman_smoother!
