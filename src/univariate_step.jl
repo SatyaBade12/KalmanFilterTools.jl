@@ -1,3 +1,4 @@
+#=
 function univariate_step!(t, Y, Z, H, T, QQ, a, P, kalman_tol, ws)
     ws.vH = changeH ? view(H, :, :, t) : view(H, :, :)
     if isdiag(vH)
@@ -8,6 +9,7 @@ function univariate_step!(t, Y, Z, H, T, QQ, a, P, kalman_tol, ws)
         univariate_step_0(ws.ystar, ws.Zstar, ws.Hstar, T, QQ, a, P, kalman_tol, ws)
     end
 end
+=#
 
 function transformed_measurement!(ystar, Zstar, y, Z, cholH)
     LTcholH = LowerTriangular(cholH)
@@ -52,7 +54,16 @@ function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws)
     return llik + 2*log(detLTcholH)
 end
 
-function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws)
+function univariate_step(Y, t, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws)
+    ny = size(Y,1)
+    detLTcholH = 1.0
+    if !isdiag(H)
+        detLTcholH = transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
+        H = I(ny)
+    else
+        copy!(ws.ystar, view(Y, :, t))
+        copy!(ws.Zstar, Z)
+    end
     llik = 0.0
     for i=1:size(Y,1)
         Zi = view(Z, i, :)
@@ -83,10 +94,19 @@ function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, 
             # p. 157, DK (2012)
         end
     end
-    return llik
+    return llik + 2*log(detLTcholH)
 end
 
-function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws, pattern)
+function univariate_step(Y, t, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws, pattern)
+    ny = size(Y,1)
+    detLTcholH = 1.0
+    if !isdiag(H)
+        detLTcholH = transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
+        H = I(ny)
+    else
+        copy!(ws.ystar, view(Y, :, t))
+        copy!(ws.Zstar, Z)
+    end
     llik = 0.0
     for i=1:size(pattern, 1)
         Zi = view(Z, pattern[i], :)
@@ -118,5 +138,5 @@ function univariate_step(t, Y, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, 
             # p. 157, DK (2012)
         end
     end
-    return llik
+    return llik + 2*log(detLTcholH)
 end
