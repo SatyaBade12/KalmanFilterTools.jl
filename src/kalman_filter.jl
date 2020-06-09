@@ -33,13 +33,12 @@ function kalman_filter!(Y::AbstractArray{U},
     vQ = view(Q, :, :, 1)
     get_QQ!(ws.QQ, vR, vQ, ws.RQ)
     l2pi = log(2*pi)
-    fill!(ws.lik, 0.0)
     t = start
     steady = false
     vP = view(P, :, :, 1)
     copy!(ws.oldP, vP)
     cholHset = false
-    @inbounds while t <= last
+    while t <= last
 
         pattern = data_pattern[t]
         ndata = length(pattern)
@@ -79,7 +78,7 @@ function kalman_filter!(Y::AbstractArray{U},
                     get_cholF!(ws.cholH, vvH)
                     cholHset = true
                 end
-                ws.lik[t] = univariate_step!(Y, t, ws.Zsmall, vvH, T, ws.QQ, va, vP, ws.kalman_tol, ws)
+                ws.lik[t] = ndata*l2pi + univariate_step!(Y, t, c, ws.Zsmall, vvH, d, T, ws.QQ, va, vP, ws.kalman_tol, ws, pattern)
                 t += 1
                 continue
             end
@@ -108,12 +107,8 @@ function kalman_filter!(Y::AbstractArray{U},
         end
         t += 1
     end
-    @inbounds if presample > 0
-        LIK = -0.5*(sum(view(ws.lik,(presample+1):nobs)))
-    else
-        LIK = -0.5*(sum(ws.lik))
-    end
-    LIK
+    vlik = view(ws.lik, start + presample:last)
+    return -0.5*sum(vlik)
 end
 
 struct DiffuseKalmanFilterWs{T, U} <: KalmanWs{T, U}
@@ -135,8 +130,9 @@ struct DiffuseKalmanFilterWs{T, U} <: KalmanWs{T, U}
     ZPstar::Matrix{T}
     Kinf::Matrix{T}
     iFZ::Matrix{T}
-    Kstar::Matrix{T}
+    K::Matrix{T}
     PTmp::Matrix{T}
+    oldP::Matrix{T}
     uKinf::Vector{T}
     uKstar::Vector{T}
     Kinf_Finf::Vector{T}
@@ -166,8 +162,9 @@ struct DiffuseKalmanFilterWs{T, U} <: KalmanWs{T, U}
         ZPstar = Matrix{T}(undef, ny, ns)
         Kinf = Matrix{T}(undef, ny, ns)
         iFZ = Matrix{T}(undef, ny, ns)
-        Kstar = Matrix{T}(undef, ny, ns)
+        K = Matrix{T}(undef, ny, ns)
         PTmp = Matrix{T}(undef, ns, ns)
+        oldP = Matrix{T}(undef, ns, ns)
         uKinf = Vector{T}(undef, ns)
         uKstar = Vector{T}(undef, ns)
         Kinf_Finf = Vector{T}(undef, ns)
@@ -178,7 +175,7 @@ struct DiffuseKalmanFilterWs{T, U} <: KalmanWs{T, U}
         lik = zeros(T, nobs)
         kalman_tol = 1e-12
         new(csmall, Zsmall, iZsmall, QQ, RQ, c, v, F, iF, iFv, a1, cholF, cholH, ZP, Fstar,
-            ZPstar, Kinf, iFZ, Kstar, PTmp, uKinf, uKstar, Kinf_Finf, ystar, Zstar, Hstar,
+            ZPstar, Kinf, iFZ, K, PTmp, oldP, uKinf, uKstar, Kinf_Finf, ystar, Zstar, Hstar,
             PZi, lik, kalman_tol)
     end
 end
@@ -220,6 +217,7 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
     vR = view(R, :, :, 1)
     vQ = view(Q, :, :, 1)
     get_QQ!(ws.QQ, vR, vQ, ws.RQ)
+    l2pi = log(2*pi)
     diffuse_kalman_tol = 1e-8
     kalman_tol = 1e-8
     cholHset = false
@@ -233,6 +231,9 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
         vR = changeR ? view(R, :, :, t) : view(R, :, :)
         vQ = changeQ ? view(Q, :, :, t) : view(Q, :, :)
+        if changeR || changeQ
+            get_QQ!(ws.QQ, vR, vQ, ws.RQ)
+        end
         va = changeA ? view(a, :, t) : view(a, :)
         va1 = changeA ? view(a, :, t + 1) : view(a, :)
         vd = changeD ? view(d, :, t) : view(d, :)
@@ -240,9 +241,6 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
         vPinf1 = changePinf ? view(Pinf, :, :, t + 1) : view(Pinf, :, :)
         vPstar = changePstar ? view(Pstar, :, :, t) : view(Pstar, :, :)
         vPstar1 = changePstar ? view(Pstar, :, :, t + 1) : view(Pstar, :, :)
-        if changeR || changeQ
-            get_QQ!(ws.QQ, vR, vQ, ws.RQ)
-        end
         vv = view(ws.v, 1:ndata)
         vvH = view(vH, pattern, pattern)
         vZP = view(ws.ZP, 1:ndata, :)
@@ -256,7 +254,7 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
         vcholH = view(ws.cholH, 1:ndata, 1:ndata, 1)
         viFv = view(ws.iFv, 1:ndata)
         vKinf = view(ws.Kinf, 1:ndata, :, 1)
-        vKstar = view(ws.Kstar, 1:ndata, :, 1)
+        vKstar = view(ws.K, 1:ndata, :, 1)
 
         # v  = Y[:,t] - c - Z*a
         get_v!(vv, Y, vc, vZsmall, va, t, pattern)
@@ -271,10 +269,10 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
                     get_cholF!(vcholH, vvH)
                     cholHset = true
                 end
-                ws.lik[t] += univariate_step(Y, t, vZsmall, vvH, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws)
+                ws.lik[t] += ndata*l2pi + univariate_step(Y, t, c, vZsmall, vvH, d, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws, pattern)
             end
         else
-            ws.lik[t] = log(det_from_cholesky(vcholF))
+            ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF))
             # Kinf   = iFinf*Z*Pinf                                   %define Kinf'=T^{-1}*K_0 with M_{\infty}=Pinf*Z'
             copy!(vKinf, vZP)
             LAPACK.potrs!('U', vcholF, vKinf)
@@ -296,66 +294,55 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
     t
 end
 
-function diffuse_kalman_filter(Y::Matrix{U},
-                               Z::AbstractArray{W},
-                               H::Matrix{U},
-                               T::Matrix{U},
-                               R::Matrix{U},
-                               Q::Matrix{U},
-                               a::Vector{U},
-                               Pinf::Matrix{U},
-                               Pstar::Matrix{U},
-                               start::V,
-                               last::V,
-                               presample::V,
-                               tol::U,
-                               ws::DiffuseKalmanLikelihoodWs) where {U <: AbstractFloat,
-                                                                     V <: Integer,
-                                                                     W <: Real}
+function diffuse_kalman_filter!(Y::AbstractArray{U},
+                                c::AbstractArray{U},
+                                Z::AbstractArray{W},
+                                H::AbstractArray{U},
+                                d::AbstractArray{U},
+                                T::AbstractArray{U},
+                                R::AbstractArray{U},
+                                Q::AbstractArray{U},
+                                a::AbstractArray{U},
+                                Pinf::AbstractArray{U},
+                                Pstar::AbstractArray{U},
+                                start::V,
+                                last::V,
+                                presample::V,
+                                tol::U,
+                                ws::DiffuseKalmanFilterWs,
+                                data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat,
+                                                                        V <: Integer,
+                                                                        W <: Real}
     ny = size(Y,1)
     nobs = last - start + 1
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     lik_cst = (nobs - presample)*ny*log(2*pi)
-    fill!(ws.lik, 0.0)
-    t = diffuse_kalman_likelihood_init!(Y, Z, H, T, ws.QQ, a, Pinf, Pstar, start, last, tol, ws)
-    kalman_likelihood(Y, Z, H, T, R, Q, a, Pstar, t, last, presample, ws)
-    @inbounds if presample > 0
-        LIK = -0.5*(lik_cst + sum(view(ws.lik, (presample+1):nobs)))
-    else
-        LIK = -0.5*(lik_cst + sum(ws.lik))
-    end
-    LIK
+    t = diffuse_kalman_filter_init!(Y, c, Z, H, d, T, R, Q, a, Pinf, Pstar, start, last, presample, tol, ws, data_pattern)
+    kalman_filter!(Y, c, Z, H, d, T, R, Q, a, Pstar, t + 1, last, presample, ws, data_pattern)
+    vlik = view(ws.lik, start + presample:last)
+    return -0.5*sum(vlik)
 end
 
-function diffuse_kalman_filter!(Y::Matrix{U},
-                               Z::AbstractArray{W},
-                               H::Matrix{U},
-                               T::Matrix{U},
-                               R::Matrix{U},
-                               Q::Matrix{U},
-                               a::Vector{U},
-                               Pinf::Matrix{U},
-                               Pstar::Matrix{U},
-                               start::V,
-                               last::V,
-                               presample::V,
-                               tol::U,
-                               ws::DiffuseKalmanFilterWs,
-                               data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat,
-                                                                       V <: Integer,
-                                                                       W <: Real}
-    ny = size(Y,1)
-    nobs = last - start + 1
-    get_QQ!(ws.QQ, R, Q, ws.RQ)
-    lik_cst = (nobs - presample)*ny*log(2*pi)
-    fill!(ws.lik, 0.0)
-    t = diffuse_kalman_filter_init!(Y, Z, H, T, ws.QQ, a, Pinf, Pstar, start, last, tol, ws, data_pattern)
-    kalman_likelihood(Y, Z, H, T, R, Q, a, Pstar, t, last, presample, ws, data_pattern)
-    @inbounds if presample > 0
-        LIK = -0.5*(lik_cst + sum(view(ws.lik, (presample+1):nobs)))
-    else
-        LIK = -0.5*(lik_cst + sum(ws.lik))
-    end
-    LIK
-end
+function diffuse_kalman_filter!(Y::AbstractArray{U},
+                                c::AbstractArray{U},
+                                Z::AbstractArray{W},
+                                H::AbstractArray{U},
+                                d::AbstractArray{U},
+                                T::AbstractArray{U},
+                                R::AbstractArray{U},
+                                Q::AbstractArray{U},
+                                a::AbstractArray{U},
+                                Pinf::AbstractArray{U},
+                                Pstar::AbstractArray{U},
+                                start::V,
+                                last::V,
+                                presample::V,
+                                tol::U,
+                                ws::DiffuseKalmanFilterWs) where {U <: AbstractFloat,
+                                                                        V <: Integer,
+                                                                        W <: Real}
 
+    m, n = size(Y)
+    full_data_pattern = [collect(1:m) for i = 1:n]
+    diffuse_kalman_filter!(Y, c, Z, H, d, T, R, Q, a, Pinf, Pstar, start, last, presample, tol, ws, full_data_pattern)
+end

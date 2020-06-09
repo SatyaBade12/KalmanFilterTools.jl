@@ -239,6 +239,11 @@ function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{T}, z::AbstractVector{
     v .= v .- az
 end
 
+# v = y - a[z] -- Z selection matrix -- univariate
+function get_v!(y::AbstractVecOrMat{T}, z::AbstractVector{U}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
+    return y[i] - a[z[i]]
+end
+
 # v = y - Z*a -- missing observations
 function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{T}, z::AbstractMatrix{T}, a::AbstractVector{T}, t::U, pattern::Vector{U}) where {T <: AbstractFloat, U <: Integer}
     v .= view(y, pattern, t)
@@ -251,10 +256,19 @@ function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{T}, z::AbstractVector{
 end
 
 # v = y - c - Z*a -- basic
-function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{T}, c::AbstractArray{T}, z::AbstractArray{T}, a::AbstractArray{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{T}, c::AbstractVector{T}, z::AbstractArray{T}, a::AbstractArray{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
     copyto!(v, 1, y, iy, ny)
     v .-= c
     gemm!('N', 'N', -1.0, z, a, 1.0, v)
+end
+
+# v = y - c - Z*a -- basic -- univariate
+function get_v!(Y::AbstractVecOrMat{T}, c::AbstractVector{T}, Z::AbstractVecOrMat{T}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
+    v = Y[i] - c[i]
+    @inbounds @simd for j = 1:length(a)
+        v -= Z[i, j]*a[j]
+    end
+    return v
 end
 
 # v = y - c - a[z] -- Z selection matrix
@@ -262,6 +276,11 @@ function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{T}, c::AbstractArray{T}
     copyto!(v, 1, y, iy, ny)
     az = view(a,z)
     v .-= c .+ az
+end
+
+# v = y - c - a[z] -- Z selection matrix -- univariate
+function get_v!(y::AbstractVecOrMat{T}, c::AbstractVector{T}, z::AbstractVector{U}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
+    return y[i] - c[i] - a[z[i]]
 end
 
 # v = y - c - Z*a -- missing observations
@@ -298,6 +317,26 @@ function get_Veta!(Veta, Q, R, N, RQ, tmp)
 end
 
 function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, Z::AbstractArray{T}, pattern::AbstractVector{U}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+    vZsmall = view(Zsmall, 1:n, :)
+    if n == ny
+        copyto!(vZsmall, Z)
+    else
+        vZsmall .= view(Z, pattern, :)
+    end
+    return vZsmall
+end
+
+function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, z::AbstractArray{U}, pattern::AbstractVector{U}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+    vZsmall = view(iZsmall, 1:n)
+    if n == ny
+        copyto!(vZsmall, z)
+    else
+        vZsmall .= view(z, pattern)
+    end
+    return vZsmall
+end
+
+function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, Z::AbstractArray{T}, pattern::AbstractVector{U}, n::U, ny::U, t::U) where {T <: AbstractFloat, U <: Integer}
     changeZ = ndims(Z) > 2
     vZ = changeZ ? view(Z, :, :, t) : view(Z, :, :)
     vZsmall = view(Zsmall, 1:n, :)
@@ -309,7 +348,7 @@ function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, Z::A
     return vZsmall
 end
 
-function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, z::AbstractArray{U}, pattern::AbstractVector{U}, n::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+function get_vZsmall(Zsmall::AbstractMatrix{T}, iZsmall::AbstractVector{U}, z::AbstractArray{U}, pattern::AbstractVector{U}, n::U, ny::U, t::U) where {T <: AbstractFloat, U <: Integer}
     changeZ = ndims(z) > 1
     vz = changeZ ? view(z, :, t) : view(z, :,)
     vZsmall = view(iZsmall, 1:n)

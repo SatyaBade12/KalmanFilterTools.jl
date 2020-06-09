@@ -78,8 +78,6 @@ function kalman_likelihood(Y::AbstractArray{U},
     nobs = last - start + 1
     # QQ = R*Q*R'
     get_QQ!(ws.QQ, R, Q, ws.RQ)
-    lik_cst = (nobs - presample)*ny*log(2*pi)
-    fill!(ws.lik, 0.0)
     cholHset = false
     t = start
     iy = (start - 1)*ny + 1
@@ -110,12 +108,9 @@ function kalman_likelihood(Y::AbstractArray{U},
         end
         t += 1
     end
-    @inbounds if presample > 0
-        LIK = -0.5*(lik_cst + sum(view(ws.lik,(presample+1):nobs)))
-    else
-        LIK = -0.5*(lik_cst + sum(ws.lik))
-    end
-    LIK
+    lik_cst = (nobs - presample)*ny*log(2*pi)
+    vlik = view(ws.lik, start + presample:last)
+    return -0.5*(lik_cst + sum(vlik))
 end
 
 function kalman_likelihood(Y::AbstractArray{U},
@@ -136,7 +131,6 @@ function kalman_likelihood(Y::AbstractArray{U},
     # QQ = R*Q*R'
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     l2pi = log(2*pi)
-    fill!(ws.lik, 0.0)
     t = start
     iy = (start - 1)*ny + 1
     ncolZ = size(Z, 2)
@@ -161,13 +155,12 @@ function kalman_likelihood(Y::AbstractArray{U},
         get_F!(vF, vZP, vZsmall, P, vH)
         info = get_cholF!(vcholF, vF)
         if info != 0
-            @show info
             # F is near singular
             if !cholHset
                 get_cholF!(vcholH, vH)
                 cholHset = true
             end
-            ws.lik[t] = univariate_step!(Y, t, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+            ws.lik[t] = ndata*l2pi + univariate_step!(Y, t, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws, pattern)
         else
             # iFv = inv(F)*v
             get_iFv!(viFv, vcholF, vv)
@@ -181,12 +174,8 @@ function kalman_likelihood(Y::AbstractArray{U},
         end
         t += 1
     end
-    @inbounds if presample > 0
-        LIK = -0.5*sum(view(ws.lik,(presample+1):nobs))
-    else
-        LIK = -0.5*sum(ws.lik)
-    end
-    LIK
+    vlik = view(ws.lik, start + presample:last)
+    return -0.5*sum(vlik)
 end
 
 function kalman_likelihood_monitored(Y::Matrix{U},
@@ -206,8 +195,6 @@ function kalman_likelihood_monitored(Y::Matrix{U},
     ns = size(T,1)
     # QQ = R*Q*R'
     get_QQ!(ws.QQ, R, Q, ws.RQ)
-    lik_cst = (nobs - presample)*ny*log(2*pi)
-    fill!(ws.lik, 0.0)
     t = start
     iy = (start - 1)*ny + 1
     steady = false
@@ -221,7 +208,6 @@ function kalman_likelihood_monitored(Y::Matrix{U},
             get_F!(ws.F, ws.ZP, Z, P, H)
             info = get_cholF!(ws.cholF, ws.F)
             if info != 0
-                @show info
                 # F is near singular
                 if !cholHset
                     get_cholF!(ws.cholH, H)
@@ -253,12 +239,9 @@ function kalman_likelihood_monitored(Y::Matrix{U},
         end
         t += 1
     end
-    @inbounds if presample > 0
-        LIK = -0.5*(lik_cst + sum(view(ws.lik,(presample+1):nobs)))
-    else
-        LIK = -0.5*(lik_cst + sum(ws.lik))
-    end
-    LIK
+    lik_cst = (nobs - presample)*ny*log(2*pi)
+    vlik = view(ws.lik, start + presample:last)
+    return -0.5*(lik_cst + sum(vlik))
 end
 
 function kalman_likelihood_monitored(Y::AbstractArray{U},
@@ -280,7 +263,6 @@ function kalman_likelihood_monitored(Y::AbstractArray{U},
     # QQ = R*Q*R'
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     l2pi = log(2*pi)
-    fill!(ws.lik, 0.0)
     t = start
     iy = (start - 1)*ny + 1
     steady = false
@@ -310,7 +292,7 @@ function kalman_likelihood_monitored(Y::AbstractArray{U},
                     get_cholF!(ws.cholH, H)
                     cholHset = true
                 end
-                ws.lik[t] = univariate_step!(Y, t, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+                ws.lik[t] = ndatat*l2pi + univariate_step!(Y, t, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws, pattern)
                 t += 1
                 continue
             end
@@ -336,12 +318,8 @@ function kalman_likelihood_monitored(Y::AbstractArray{U},
         end
         t += 1
     end
-    @inbounds if presample > 0
-        LIK = -0.5*(sum(view(ws.lik,(presample+1):nobs)))
-    else
-        LIK = -0.5*(sum(ws.lik))
-    end
-    LIK
+    vlik = view(ws.lik, start + presample:last)
+    return -0.5*sum(vlik)
 end
 
 struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
@@ -425,8 +403,6 @@ function fast_kalman_likelihood(Y::Matrix{U},
     ny = size(Y,1)
     nobs = last - start + 1
     get_QQ!(ws.QQ, R, Q, ws.RQ)
-    lik_cst = (nobs - presample)*ny*log(2*pi)
-    fill!(ws.lik, 0.0)
     # F  = Z*P*Z' + H
     get_F!(ws.F, ws.ZP, Z, P, H)
     get_cholF!(ws.cholF, ws.F)
@@ -460,12 +436,9 @@ function fast_kalman_likelihood(Y::Matrix{U},
         update_W!(ws.W, ws.ZW, ws.cholF, T, ws.K, ws.iFZW, ws.KtiFZW)
         t += 1
     end
-    @inbounds if presample > 0
-        LIK = -0.5*(lik_cst + sum(view(ws.lik, (presample+1):nobs)))
-    else
-        LIK = -0.5*(lik_cst + sum(ws.lik))
-    end
-    LIK
+    lik_cst = (nobs - presample)*ny*log(2*pi)
+    vlik = view(ws.lik, start + presample:last)
+    return -0.5*(lik_cst + sum(vlik))
 end
 
 function fast_kalman_likelihood(Y::Matrix{U},
@@ -485,7 +458,6 @@ function fast_kalman_likelihood(Y::Matrix{U},
     nobs = last - start + 1
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     l2pi = log(2*pi)
-    fill!(ws.lik, 0.0)
     # F  = Z*P*Z' + H
     get_F!(ws.F, ws.ZP, Z, P, H)
     get_cholF!(ws.cholF, ws.F)
@@ -534,12 +506,8 @@ function fast_kalman_likelihood(Y::Matrix{U},
         update_W!(vW, vZW, vcholF, T, vK, viFZW, vKtiFZW)
         t += 1
     end
-    @inbounds if presample > 0
-        LIK = -0.5*(sum(view(ws.lik, (presample+1):nobs)))
-    else
-        LIK = -0.5*(sum(ws.lik))
-    end
-    LIK
+    vlik = view(ws.lik, start + presample:last)
+    return -0.5*sum(vlik)
 end
 
 struct DiffuseKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
@@ -686,7 +654,6 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
 
     ny = size(Y, 1)
     t = start
-    LIK = 0
     iy = (start - 1)*ny + 1
     diffuse_kalman_tol = 1e-8
     kalman_tol = 1e-8
@@ -715,7 +682,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
             if norm(vF) < tol
                 return t - 1
             else
-                ws.lik[t] += univariate_step(Y, t, vZsmall, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, pattern, ws)
+                ws.lik[t] += ndata*l2pi + univariate_step(Y, t, vZsmall, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, pattern, ws, pattern)
             end
         else
             ws.lik[t] = log(det_from_cholesky(ws.cholF))
@@ -765,16 +732,11 @@ function diffuse_kalman_likelihood(Y::Matrix{U},
     ny = size(Y,1)
     nobs = last - start + 1
     get_QQ!(ws.QQ, R, Q, ws.RQ)
-    lik_cst = (nobs - presample)*ny*log(2*pi)
-    fill!(ws.lik, 0.0)
     t = diffuse_kalman_likelihood_init!(Y, Z, H, T, ws.QQ, a, Pinf, Pstar, start, last, tol, ws)
-    kalman_likelihood(Y, Z, H, T, R, Q, a, Pstar, t, last, presample, ws)
-    @inbounds if presample > 0
-        LIK = -0.5*(lik_cst + sum(view(ws.lik, (presample+1):nobs)))
-    else
-        LIK = -0.5*(lik_cst + sum(ws.lik))
-    end
-    LIK
+    kalman_likelihood(Y, Z, H, T, R, Q, a, Pstar, t + 1, last, presample, ws)
+    lik_cst = (nobs - presample)*ny*log(2*pi)
+    vlik = view(ws.lik, start + presample:last)
+    return -0.5*(lik_cst + sum(vlik))
 end
 
 function diffuse_kalman_likelihood(Y::Matrix{U},
@@ -797,15 +759,9 @@ function diffuse_kalman_likelihood(Y::Matrix{U},
     ny = size(Y,1)
     nobs = last - start + 1
     get_QQ!(ws.QQ, R, Q, ws.RQ)
-    lik_cst = (nobs - presample)*ny*log(2*pi)
-    fill!(ws.lik, 0.0)
     t = diffuse_kalman_likelihood_init!(Y, Z, H, T, ws.QQ, a, Pinf, Pstar, start, last, tol, ws, data_pattern)
-    kalman_likelihood(Y, Z, H, T, R, Q, a, Pstar, t, last, presample, ws, data_pattern)
-    @inbounds if presample > 0
-        LIK = -0.5*(lik_cst + sum(view(ws.lik, (presample+1):nobs)))
-    else
-        LIK = -0.5*(lik_cst + sum(ws.lik))
-    end
-    LIK
+    kalman_likelihood(Y, Z, H, T, R, Q, a, Pstar, t + 1, last, presample, ws, data_pattern)
+    vlik = view(ws.lik, start + presample:last)
+    return -0.5*sum(vlik)
 end
 

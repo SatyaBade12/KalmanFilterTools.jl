@@ -278,10 +278,10 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     PPstar = repeat(Pstar_0, 1, 1, nobs)
     t1 = KalmanFilterTools.diffuse_kalman_filter_init!(Y, c, Z, H, d, T, R, Q, aa, PPinf, PPstar, 1, nobs, 0, 1e-8, ws5, full_data_pattern)
     @test t1 == t
-    @test llk_3 ≈ -0.5*(t*ny*log(2*pi) + sum(ws5.lik[1:t1]))
+    @test llk_3 ≈ -0.5*sum(ws5.lik[1:t1])
     @test aa[:, t1 + 1] ≈ vars["a"]
     @test PPstar[:, :, t1 + 1] ≈ vars["Pstar1"]
-    
+
     z = [4, 3]
     a = copy(a_0)
     Pinf = copy(Pinf_0)
@@ -299,7 +299,7 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     PPstar = repeat(Pstar_0, 1, 1, nobs)
     t1 = KalmanFilterTools.diffuse_kalman_filter_init!(Y, c, z, H, d, T, R, Q, aa, PPinf, PPstar, 1, nobs, 0, 1e-8, ws5, full_data_pattern)
     @test t1 == t
-    @test llk_3 ≈ -0.5*(t*ny*log(2*pi) + sum(ws5.lik[1:t1]))
+    @test llk_3 ≈ -0.5*sum(ws5.lik[1:t1])
     @test aa[:, t1 + 1] ≈ vars["a"]
     @test PPstar[:, :, t1 + 1] ≈ vars["Pstar1"]
     
@@ -307,13 +307,26 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     Pinf = copy(Pinf_0)
     Pstar = copy(Pstar_0)
     llk_4 = diffuse_kalman_likelihood(Y, Z, H, T, R, Q, a, Pinf, Pstar, 1, nobs, 0, 1e-8, ws4)
+    
+    aa = repeat(a_0, 1, nobs + 1)
+    Pinf = copy(Pinf_0)
+    Pstar = copy(Pstar_0)
 
+    llk_4a = diffuse_kalman_filter!(Y, c, Z, H, d, T, R, Q, aa, Pinf, Pstar, 1, nobs, 0, 1e-8, ws5)
+    @test llk_4a ≈ llk_4
+   
     a = copy(a_0)
     Pinf = copy(Pinf_0)
     Pstar = copy(Pstar_0)
     llk_5 = diffuse_kalman_likelihood(Y, z, H, T, R, Q, a, Pinf, Pstar, 1, nobs, 0, 1e-8, ws4)
     @test llk_5 ≈ llk_4 
 
+    aa = repeat(a_0, 1, nobs + 1)
+    Pinf = copy(Pinf_0)
+    Pstar = copy(Pstar_0)
+    llk_5a = diffuse_kalman_filter!(Y, c, z, H, d, T, R, Q, aa, Pinf, Pstar, 1, nobs, 0, 1e-8, ws5)
+    @test llk_5a ≈ llk_5
+    
     a = copy(a_0)
     Pinf = copy(Pinf_0)
     Pstar = copy(Pstar_0)
