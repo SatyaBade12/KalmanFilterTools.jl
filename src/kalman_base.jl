@@ -126,6 +126,12 @@ end
 function get_iF!(iF::AbstractArray{T}, cholF::AbstractArray{T}) where T <: AbstractFloat
     copy!(iF, cholF)
     LAPACK.potri!('U', iF)
+    n = size(iF, 1)
+    for i = 1:n - 1
+        for j = 2:n
+            iF[j, i] = iF[i, j]
+        end
+    end
 end
 
 function get_iFv!(iFv::AbstractVector{T}, cholF::AbstractArray{T}, v::AbstractVector{T}) where T <: AbstractFloat

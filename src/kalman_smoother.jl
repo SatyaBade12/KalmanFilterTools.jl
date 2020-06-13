@@ -94,7 +94,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
 end
 
 KalmanSmootherWs(ny, ns, np, nobs) = KalmanSmootherWs{Float64, Int64}(ny, ns, np, nobs)
-
+using Test
 function kalman_filter_2!(Y::AbstractArray{U},
                           c::AbstractArray{U},
                           Z::AbstractArray{W},
@@ -120,6 +120,9 @@ function kalman_filter_2!(Y::AbstractArray{U},
     changeA = ndims(a) > 1
     changeP = ndims(P) > 2
 
+    if !changeH
+        get_cholF!(ws.cholH, H)
+    end
     ny = size(Y, 1)
     nobs = last - start + 1
     ns = size(T,1)
@@ -148,8 +151,12 @@ function kalman_filter_2!(Y::AbstractArray{U},
             vQ = view(Q, :, :, t)
             get_QQ!(ws.QQ, vR, vQ, ws.RQ)
         end
+        va = view(a, :, t)
+        va1 = view(a, :, t + 1)
         # outputs
         vat = view(ws.at_t, :, t)
+        vP = view(P, :, :, t)
+        vP1 = view(P, :, :, t + 1)
         vPt = view(ws.Pt_t, :, :, t)
         vv = view(ws.v, 1:ndata, t)
         vF = view(ws.F, 1:ndata, 1:ndata)
@@ -169,12 +176,12 @@ function kalman_filter_2!(Y::AbstractArray{U},
         get_F!(vF, vZP, vZ, vP, vH)
         info = get_cholF!(vcholF, vF)
         if info != 0
+
             # F is near singular
-            if !cholHset
-                    get_cholF!(ws.cholH, H)
-                cholHset = true
+            if changeH
+                get_cholF!(ws.cholH, vH)
             end
-            ws.lik[t] = univariate_step!(Y, t, vZ, vH, vT, ws.QQ, a, P, ws.kalman_tol, ws)
+            ws.lik[t] = univariate_step!(Y, t, vZ, vH, vT, ws.QQ, va, vP, ws.kalman_tol, ws)
             t += 1
             continue
         end
@@ -186,20 +193,21 @@ function kalman_filter_2!(Y::AbstractArray{U},
         ws.lik[t] = -.5*ndata*l2pi -.5*log(det_from_cholesky(vcholF)) -.5*LinearAlgebra.dot(vv, viFv)
 #        if t <= last
 #            if !steady
-                # K = iF*ZP
-            mul!(vK,viF,vZP)
-                # amounts to K_t in DK (4.22): here KDK = T*K'
-            mul!(vKDK,vT,transpose(vK))
-#            end
-            # a{t_t} = d + a_t + K'*v
-            filtered_a!(vat, va, vd, vK, vv, ws.tmp_ns)
-            # a_{t+1} = T a_{t_t}
-            mul!(va,vT,vat)
+        # K = iF*ZP
+        mul!(vK,viF,vZP)
+        # amounts to K_t in DK (4.22): here KDK = T*K'
+        mul!(vKDK,vT,transpose(vK))
+        #            end
+        # a{t_t} = a_t + K'*v
+        filtered_a!(vat, va, vd, vK, vv, ws.tmp_ns)
+        # a_{t+1} = d + T a_{t_t}
+        copy!(va1, vd)
+        mul!(va1, vT, vat, 1.0, 1.0)
 #            if !steady
-                # P_{t|t} = P_t - K'*Z*P_t
-            filtered_P!(vPt, vP, vK, vZP, ws.PTmp)
-                # P_{t+1} = T*P_{t|t}*T'+ QQ
-            update_P!(vP, vPt, vT, ws.QQ, ws.PTmp)
+        # P_{t|t} = P_t - K'*Z*P_t
+        filtered_P!(vPt, vP, vK, vZP, ws.PTmp)
+        # P_{t+1} = T*P_{t|t}*T'+ QQ
+        update_P!(vP1, vPt, vT, ws.QQ, ws.PTmp)
 
 #=
                 ws.oldP .-= vP1
@@ -250,7 +258,6 @@ function kalman_smoother!(Y::AbstractArray{U},
     kalman_filter_2!(Y,c, Z, H, d, T, R, Q, a,
                      P, start, last, presample, ws,
                      data_pattern)
-
     fill!(ws.r1,0.0)
     fill!(ws.N1,0.0)
 
@@ -261,8 +268,8 @@ function kalman_smoother!(Y::AbstractArray{U},
         vZ = changeZ ? view(Z, :, :, t) : view(Z, :, :)
         vH = changeH ? view(H, :, :, t) : view(H, :, :)
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
-        va = view(ws.at_t, :, t)
-        vP = view(ws.Pt_t, :, :, t)
+        va = view(a, :, t)
+        vP = view(P, :, :, t)
         vQ = changeQ ? view(Q, :, :, t) : view(Q, :, :)
         vR = changeR ? view(R, :, :, t) : view(R, :, :)
         vKDK = view(ws.KDK, :, 1:ndata, t) # amounts to K_t (4.22): here KDK = T*K'
@@ -305,12 +312,12 @@ function kalman_smoother!(Y::AbstractArray{U},
 
         if length(alphah) > 0
             valphah = view(alphah, :, t)
-            if t==last
-                valphah .= va
-            else
+#            if t==last
+#                valphah .= va
+#            else
                 # alphah_t = a_t + P_t*r_{t-1} (DK 4.44)
-                get_alphah!(valphah, va, vP, ws.r1)
-            end
+            get_alphah!(valphah, va, vP, ws.r)
+#            end
         end
         if length(Valpha) > 0
             vValpha = view(Valpha, :, :, t)

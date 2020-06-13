@@ -193,7 +193,7 @@ end
 
 end
 
-@testset "Kalman Filter" begin
+@testset "Kalman Filter and Smoother" begin
     c = zeros(ny)
     d = zeros(ns)
     s = copy(s_0)
@@ -210,8 +210,8 @@ end
     Ts = zeros(ns, ns, nobs)
     Rs = zeros(ns, np, nobs)
     Qs = zeros(np, np, nobs)
-    ss = zeros(ns, nobs+1)
-    Ps = zeros(ns, ns, nobs)
+    ss = zeros(ns, nobs + 1)
+    Ps = zeros(ns, ns, nobs + 1)
 
     for i = 1:nobs
         cs[:, i] = c
@@ -230,6 +230,26 @@ end
     @test ss[:, nobs1+1] ≈ s
     @test Ps[:, : , nobs1+1] ≈ P
 
+    ws2 = KalmanSmootherWs{Float64, Int64}(ny, ns, np, nobs)
+    ss1 = zeros(ns, nobs+1)
+    ss1[:, 1] = s_0
+    Ps1 = similar(Ps)
+    Ps1[:, :, 1] = P_0
+    alphah = zeros(ns, nobs)
+    epsilonh = zeros(ny, nobs)
+    etah = zeros(np, nobs)
+    Valpha = zeros(ns, ns, nobs)
+    Vepsilon = zeros(ny, ny, nobs)
+    Veta = zeros(np, np, nobs)
+    kalman_smoother!(y, cs, Zs, Hs, ds, Ts, Rs, Qs, ss1, Ps1, alphah, epsilonh, etah, Valpha, Vepsilon, Veta, 1, nobs, 0, ws2, full_data_pattern)
+    @test ss1[:, nobs1 + 1] ≈ s
+    @test Ps1[:, : , nobs1+1] ≈ P
+
+    for i = 1:nobs
+        Hs[:, :, i] = zeros(ny, ny)
+    end
+    kalman_smoother!(y, cs, Zs, Hs, ds, Ts, Rs, Qs, ss1, Ps1, alphah, epsilonh, etah, Valpha, Vepsilon, Veta, 1, nobs, 0, ws2, full_data_pattern)
+    @test y ≈ view(alphah, [4, 3, 2], :)
 end
 
 # Replication data computed with Dynare
@@ -417,5 +437,8 @@ end
     llk_5 = diffuse_kalman_likelihood(Y, z, H, T, R, Q, a, Pinf, Pstar, 2, nobs-1, 0, 1e-8, ws4, full_data_pattern)
     @test llk_5 ≈ llk_4 
 end
+
+@testset "smoother" begin
+end    
 nothing
 
