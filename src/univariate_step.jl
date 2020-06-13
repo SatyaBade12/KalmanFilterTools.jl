@@ -312,10 +312,10 @@ function univariate_step(Y, t, c, Z, H, d, T, QQ, a, Pinf, Pstar, diffuse_kalman
     end
     llik = 0.0
     l2pi = log(2*pi)
-    ndata = size(pattern)
+    ndata = length(pattern)
     for i=1:ndata
         Zi = view(ws.Zstar, pattern[i], :)
-        v = get_v(ws.ystar, c, ws.Zstar, a, pattern[i])
+        v = get_v!(ws.ystar, c, ws.Zstar, a, pattern[i])
         Fstar = get_Fstar!(Zi, Pstar, H[i], ws.uKstar)
         Finf = get_Finf!(Zi, Pstar, ws.uKstar)
         # Conduct check of rank
@@ -326,7 +326,7 @@ function univariate_step(Y, t, c, Z, H, d, T, QQ, a, Pinf, Pstar, diffuse_kalman
         # Also the test for singularity is better set coarser for Finf than for Fstar for the same reason
         if Finf > diffuse_kalman_tol                 # F_{\infty,t,i} = 0, use upper part of bracket on p. 175 DK (2012) for w_{t,i}
             ws.Kinf_Finf .= ws.uKinf./Finf
-            a .+= prediction_error.*ws.Kinf_Finf
+            a .+= v .* ws.Kinf_Finf
             # Pstar     = Pstar + Kinf*(Kinf_Finf'*(Fstar/Finf)) - Kstar*Kinf_Finf' - Kinf_Finf*Kstar'
             ger!( Fstar/Finf, ws.uKinf, ws.Kinf_Finf, Pstar)
             ger!( -1.0, ws.uKstar, ws.Kinf_Finf, Pstar)
@@ -346,8 +346,10 @@ function univariate_step(Y, t, c, Z, H, d, T, QQ, a, Pinf, Pstar, diffuse_kalman
     copy!(ws.a1, d)
     mul!(ws.a1, T, a, 1.0, 1.0)
     a .= ws.a1
-    mul!(ws.PTmp, T, P)
-    copy!(P, RQR)
-    mul!(P, ws.PTmp, T', 1.0, 1.0)
+    mul!(ws.PTmp, T, Pinf)
+    mul!(Pinf, ws.PTmp, transpose(T))
+    mul!(ws.PTmp, T, Pstar)
+    copy!(Pstar, QQ)
+    mul!(Pstar, ws.PTmp, transpose(T), 1.0, 1.0)
     return llik + 2*log(detLTcholH)
 end

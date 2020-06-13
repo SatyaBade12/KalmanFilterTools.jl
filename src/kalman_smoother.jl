@@ -207,7 +207,7 @@ function kalman_filter_2!(Y::AbstractArray{U},
         # P_{t|t} = P_t - K'*Z*P_t
         filtered_P!(vPt, vP, vK, vZP, ws.PTmp)
         # P_{t+1} = T*P_{t|t}*T'+ QQ
-        update_P!(vP1, vPt, vT, ws.QQ, ws.PTmp)
+        update_P!(vP1, vT, vPt, ws.QQ, ws.PTmp)
 
 #=
                 ws.oldP .-= vP1

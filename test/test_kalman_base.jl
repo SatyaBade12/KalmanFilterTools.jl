@@ -153,6 +153,24 @@ ZW = rand(ny, ny)
 KalmanFilterTools.get_M!(M, cholF, ZW) 
 @test M ≈ -inv(F)
 
+# Ptt = P - K'*Z*P
+Ptt = randn(ns, ns)
+P - randn(ns, ns)
+K = randn(ny, ns)
+ZP = randn(ny, ns)
+get_updated_Ptt!(Ptt, P, K, ZP)
+@test Ptt ≈ P - transpose(K)*ZP
+
+# Pstartt = Pstar-Pstar*Z'*Kinf-Pinf*Z'*Kstar                           %(5.14) DK(2012)
+Pstartt = randn(ns, ns)
+Pstar = randn(ns, ns)
+ZPstar = randn(ny, ns)
+Kinf = randn(ny, ns)
+ZPinf = randn(ny, ns)
+Kstar = randn(ny, ns)
+KalmanFilterTools.get_updated_Pstartt!(Pstartt, Pstar, ZPstar, Kinf, ZPinf, Kstar)
+@test Pstartt ≈ Pstar - transpose(ZPstar)*Kinf - transpose(ZPinf)*Kstar
+
 # V_t = P_t - P_t*N_{t-1}*P_t
 V = Matrix{Float64}(undef, ns, ns)
 #P = Matrix{Float64}(undef, ns, ns)
@@ -170,10 +188,18 @@ RQ = zeros(ns, np)
 KalmanFilterTools.get_QQ!(QQ, R, Q, RQ)
 @test QQ ≈ R*Q*R'
 
-#v  = Y[:,t] - Z*a
-a = rand(ns)
+# att = a + K'*v
+att = randn(ns)
+a = randn(ns)
+K = randn(ny, ns)
 v = rand(ny)
-y = rand(ny, 1)
+KalmanFilterTools.get_updated_a!(att, a, K, v)
+@test att ≈ a + transpose(K)*v
+
+#v  = Y[:,t] - Z*a
+a = randn(ns)
+v = randn(ny)
+y = randn(ny, 1)
 KalmanFilterTools.get_v!(v, y, Z, a, 1, ny)
 @test v ≈ y[:,1] - Z*a
 
@@ -239,6 +265,14 @@ vT = view(T, :, :)
 KalmanFilterTools.update_a!(va1, va, vd, vK, vv, a1, vT)
 @test va1  ≈ vd + vT*(va + vK'*vv)
 
+# a = d + T*att
+a = randn(ns)
+d = randn(ns)
+T = randn(ns, ns)
+att = randn(ns)
+KalmanFilterTools.update_a!(a, d, T, att)
+@test a ≈ d + T*att
+
 # K = K + Z*W*M*W'
 K = randn(ny, ns)
 K_0 = copy(K)
@@ -286,6 +320,14 @@ vP1 = copy(vP)
 Ptmp = similar(P)
 KalmanFilterTools.update_P!(vP1, vT, QQ, vK, vZP, PTmp)
 @test vP1 ≈ vT*(vP - vK'*vZP)*vT' + QQ
+
+# P = T*Ptt*T' + QQ
+P = randn(ns, ns)
+T = randn(ns ns)
+Ptt = randn(ns, ns)
+QQ = randn(ns, ns)
+KalmanFilterTools.update_P!(P, T, Ptt, QQ)
+@test P ≈ T*Ptt*transpose(T) + QQ
 
 # r_{t-1} = Z_t'*iF_t*v_t + L_t'r_t
 r = randn(ns)

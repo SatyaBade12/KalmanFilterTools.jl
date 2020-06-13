@@ -223,6 +223,27 @@ function get_QQ!(c::AbstractMatrix{T}, a::AbstractMatrix{T}, b::AbstractMatrix{T
     mul!(c, work, transpose(a))
 end
 
+# att = a + K'*v
+function get_updated_a!(att::AbstractVector{T}, a::AbstractVector{T}, K::AbstractMatrix{T}, v::AbstractVector{T}) where T <: AbstractFloat
+    copy!(att, a)
+    mul!(att, transpose(K), v, 1.0, 1.0)
+end
+
+# Ptt = P - K'*Z*P
+function get_updated_Ptt!(Ptt::AbstractMatrix{T}, P::AbstractMatrix{T}, K::AbstractMatrix{T}, ZP::AbstractMatrix{T}) where T <: AbstractFloat
+    copy!(Ptt, P)
+    mul!(Ptt, transpose(K), ZP, -1.0, 1.0)
+end
+
+# Pstartt = Pstar-Pstar*Z'*Kinf-Pinf*Z'*Kstar                           %(5.14) DK(2012)
+function get_updated_Pstartt!(Pstartt::AbstractMatrix{T}, Pstar::AbstractMatrix{T}, ZPstar::AbstractMatrix{T},
+                              Kinf::AbstractMatrix{T}, ZPinf::AbstractMatrix{T},
+                              Kstar::AbstractMatrix{T}, vPinftt::AbstractMatrix{T}, PTmp::AbstractMatrix{T}) where T <: AbstractFloat
+    copy!(Pstartt, Pstar)
+    mul!(Pstartt, transpose(ZPstar), Kinf, -1.0, 1.0)
+    mul!(Pstartt, transpose(ZPinf), Kstar, -1.0, 1.0)
+end
+
 # v = y - Z*a -- basic
 function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{T}, z::AbstractVecOrMat{T}, a::AbstractVector{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
     copyto!(v, 1, y, iy, ny)
@@ -381,6 +402,12 @@ function update_a!(a1::AbstractArray{U}, a::AbstractArray, d::AbstractArray{U}, 
     a1 .+= d
 end
 
+# a = d + T*att
+function update_a!(a1::AbstractVector{U}, d::AbstractVector{U}, T::AbstractMatrix{U}, att::AbstractVector{U}) where U <: AbstractFloat
+    copy!(a1, d)
+    mul!(a1, T, att)
+end
+
 # a = d + a + K'*v
 function filtered_a!(a1::AbstractArray{U}, a::AbstractArray{U}, d::AbstractArray{U}, K::AbstractArray{U}, v::AbstractArray{U}, work::AbstractArray{U}) where U <: AbstractFloat
     a1 .= a
@@ -440,29 +467,35 @@ function filtered_P!(P1::AbstractArray{U}, P::AbstractArray{U}, K::AbstractArray
     gemm!('T', 'N', -1.0, K, ZP, 1.0, P1)
 end
 
-# P = T*P*T'+ QQ
-function update_P!(P::AbstractArray{U}, P1::AbstractArray{U}, T::AbstractArray{U}, QQ::AbstractArray{U}, Ptmp::AbstractArray{U}) where U <: AbstractFloat
-    mul!(Ptmp, T, P1)
+# P = T*Ptt*T' + QQ
+function update_P!(P::AbstractMatrix{U}, T::AbstractMatrix{U}, Ptt::AbstractMatrix{U}, QQ::AbstractMatrix{U}, Ptmp::AbstractMatrix{U}) where U <: AbstractFloat
+    mul!(Ptmp, Ptt, transpose(T))
     copy!(P, QQ)
-    gemm!('N', 'T', 1.0, Ptmp, T, 1.0, P)
+    mul!(P, T, Ptmp, 1.0, 1.0)
+end
+
+# Pinf = T*Pinftt*T'
+function update_P!(P::AbstractMatrix{U}, T::AbstractMatrix{U}, Ptt::AbstractMatrix{U}, Ptmp::AbstractMatrix{U}) where U <: AbstractFloat
+    mul!(Ptmp, Ptt, transpose(T))
+    mul!(P, T, Ptmp)
 end
 
 # Pstar  = T*(Pstar-Pstar*Z'*Kinf-Pinf*Z'*Kstar)*T'+QQ;         %(5.14) DK(2012)
-function update_Pstar!(Pstar1, Pstar, T, ZPinf, ZPstar, Kinf, Kstar, QQ, PTmp)
+function update_Pstar!(Pstar, T, ZPinf, ZPstar, Kinf, Kstar, QQ, PTmp)
     copy!(PTmp, Pstar)
     mul!(PTmp, transpose(ZPstar), Kinf, -1.0, 1.0)
     mul!(PTmp, transpose(ZPinf), Kstar, -1.0, 1.0)
     copy!(Pstar, PTmp)
     mul!(PTmp, T, Pstar)
-    copy!(Pstar1, QQ)
-    mul!(Pstar1, PTmp, transpose(T), 1.0, 1.0)
+    copy!(Pstar, QQ)
+    mul!(Pstar, PTmp, transpose(T), 1.0, 1.0)
 end
 
 # Pinf   = T*(Pinf-Pinf*Z'*Kinf)*T';                             %(5.14) DK(2012)
-function update_Pinf!(Pinf1, Pinf, T, ZPinf, Kinf, PTmp)
+function update_Pinf!(Pinf, T, ZPinf, Kinf, PTmp)
     mul!(Pinf, transpose(ZPinf), Kinf, -1.0, 1.0) 
     mul!(PTmp, T, Pinf)
-    mul!(Pinf1, PTmp, transpose(T))
+    mul!(Pinf, PTmp, transpose(T))
 end
 
 # r_{t-1} = Z_t'*iF_t*v_t + L_t'r_t

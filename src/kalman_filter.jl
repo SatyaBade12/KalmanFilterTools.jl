@@ -9,7 +9,9 @@ function kalman_filter!(Y::AbstractArray{U},
                         R::AbstractArray{U},
                         Q::AbstractArray{U},
                         a::AbstractArray{U},
+                        att::AbstractArray{U},
                         P::AbstractArray{U},
+                        Ptt::AbstractArray{U},
                        start::V,
                        last::V,
                        presample::V,
@@ -51,9 +53,11 @@ function kalman_filter!(Y::AbstractArray{U},
         vR = changeR ? view(R, :, :, t) : view(R, :, :)
         vQ = changeQ ? view(Q, :, :, t) : view(Q, :, :)
         va = changeA ? view(a, :, t) : view(a, :)
+        vatt = changeA ? view(att, :, t) : view(att, :)
         va1 = changeA ? view(a, :, t + 1) : view(a, :)
         vd = changeD ? view(d, :, t) : view(d, :)
         vP = changeP ? view(P, :, :, t) : view(P, :, :)
+        vPtt = changeP ? view(Ptt, :, :, t) : view(Ptt, :, :)
         vP1 = changeP ? view(P, :, :, t + 1) : view(P, :, :)
         if changeR || changeQ
             get_QQ!(ws.QQ, vR, vQ, ws.RQ)
@@ -91,18 +95,24 @@ function kalman_filter!(Y::AbstractArray{U},
                 # K = iF*Z*P
                 get_K!(vK, vZP, vcholF)
             end
-            # a = d + T(a + K'*v)
-            update_a!(va1, va, vd, vK, vv, ws.a1, vT)
+            # att = a + K'*v
+            get_updated_a!(vatt, va, vK, vv)
+            # a = d + T*att
+            update_a!(va1, vd, vT, vatt)
             if !steady
-                # P = T*(P - K'*Z*P)*T'+ QQ
-                copy!(vP1, vP)
-                update_P!(vP1, vT, ws.QQ, vK, vZP, ws.PTmp)
+                copy!(ws.oldP, vP)
+                # Ptt = P - K'*Z*P
+                get_updated_Ptt!(vPtt, vP, vK, vZP)
+                # P = T*Ptt*T + QQ
+                update_P!(vP1, vT, vPtt, ws.QQ, ws.PTmp)
                 ws.oldP .-= vP1
                 if norm(ws.oldP) < ns*eps()
                     steady = true
-                else
-                    copy!(ws.oldP, vP)
                 end
+            elseif t > 1
+                copy!(vP1, vP)
+                vPtt1 = view(ws.Ptt, :, : , t-1)
+                copy!(vPtt, vPtt1)
             end
         end
         t += 1
@@ -191,8 +201,11 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
                                      R::AbstractArray{U},
                                      Q::AbstractArray{U},
                                      a::AbstractArray{U},
+                                     att::AbstractArray{U},
                                      Pinf::AbstractArray{U},
+                                     Pinftt::AbstractArray{U},
                                      Pstar::AbstractArray{U},
+                                     Pstartt::AbstractArray{U},
                                      start::V,
                                      last::V,
                                      presample::V,
@@ -235,11 +248,14 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
             get_QQ!(ws.QQ, vR, vQ, ws.RQ)
         end
         va = changeA ? view(a, :, t) : view(a, :)
+        vatt = changeA ? view(att, :, t) : view(att, :)
         va1 = changeA ? view(a, :, t + 1) : view(a, :)
         vd = changeD ? view(d, :, t) : view(d, :)
         vPinf = changePinf ? view(Pinf, :, :, t) : view(Pinf, :, :)
+        vPinftt = changePinf ? view(Pinftt, :, :, t) : view(Pinftt, :, :)
         vPinf1 = changePinf ? view(Pinf, :, :, t + 1) : view(Pinf, :, :)
         vPstar = changePstar ? view(Pstar, :, :, t) : view(Pstar, :, :)
+        vPstartt = changePstar ? view(Pstartt, :, :, t) : view(Pstartt, :, :)
         vPstar1 = changePstar ? view(Pstar, :, :, t + 1) : view(Pstar, :, :)
         vv = view(ws.v, 1:ndata)
         vvH = view(vH, pattern, pattern)
@@ -269,7 +285,7 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
                     get_cholF!(vcholH, vvH)
                     cholHset = true
                 end
-                ws.lik[t] += ndata*l2pi + univariate_step(Y, t, c, vZsmall, vvH, d, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws, pattern)
+                ws.lik[t] += ndata*l2pi + univariate_step(Y, t, vc, vZsmall, vvH, vd, vT, ws.QQ, va, vPinf, vPstar, diffuse_kalman_tol, kalman_tol, ws, pattern)
             end
         else
             ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF))
@@ -282,12 +298,18 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
             # note that there is a typo in DK (2003) with "+ Kinf" instead of "- Kinf",
             # but it is correct in their appendix
             get_Kstar!(vKstar, vZsmall, vPstar, vFstar, vKinf, vcholF)
-            # Pstar  = T*(Pstar-Pstar*Z'*Kinf-Pinf*Z'*Kstar)*T'+QQ;         %(5.14) DK(2012)
-            update_Pstar!(vPstar1, vPstar, vT, vZPinf, vZPstar, vKinf, vKstar, ws.QQ, ws.PTmp)
-            # Pinf   = T*(Pinf-Pinf*Z'*Kinf)*T';                             %(5.14) DK(2012)
-            update_Pinf!(vPinf1, vPinf, vT, vZPinf, vKinf, ws.PTmp)
-            # a      = d + T*(a+Kinf*v);                                          %(5.13) DK(2012)
-            update_a!(va1, va, vd, vKinf, vv, ws.a1, vT)
+            get_updated_a!(vatt, va, vKinf, vv)
+            # a = d + T*att
+            update_a!(va1, vd, vT, vatt)
+            # Pinf_tt = Pinf - Kinf'*Z*Pinf                                    %(5.14) DK(2012)
+            get_updated_Ptt!(vPinftt, vPinf, vKinf, vZPinf)
+            # Pinf = T*Ptt*T
+            update_P!(vPinf1, vT, vPinftt, ws.PTmp)
+            # Pstartt = Pstar-Pstar*Z'*Kinf-Pinf*Z'*Kstar                           %(5.14) DK(2012)
+            get_updated_Pstartt!(vPstartt, vPstar, vZPstar, vKinf, vZPinf,
+                                 vKstar, vPinftt, ws.PTmp)
+            # Pinf = T*Ptt*T + QQ
+            update_P!(vPstar1, vT, vPstartt, ws.QQ, ws.PTmp)
         end
         t += 1
     end
@@ -303,8 +325,11 @@ function diffuse_kalman_filter!(Y::AbstractArray{U},
                                 R::AbstractArray{U},
                                 Q::AbstractArray{U},
                                 a::AbstractArray{U},
+                                att::AbstractArray{U},
                                 Pinf::AbstractArray{U},
+                                Pinftt::AbstractArray{U},
                                 Pstar::AbstractArray{U},
+                                Pstartt::AbstractArray{U},
                                 start::V,
                                 last::V,
                                 presample::V,
@@ -317,8 +342,8 @@ function diffuse_kalman_filter!(Y::AbstractArray{U},
     nobs = last - start + 1
     get_QQ!(ws.QQ, R, Q, ws.RQ)
     lik_cst = (nobs - presample)*ny*log(2*pi)
-    t = diffuse_kalman_filter_init!(Y, c, Z, H, d, T, R, Q, a, Pinf, Pstar, start, last, presample, tol, ws, data_pattern)
-    kalman_filter!(Y, c, Z, H, d, T, R, Q, a, Pstar, t + 1, last, presample, ws, data_pattern)
+    t = diffuse_kalman_filter_init!(Y, c, Z, H, d, T, R, Q, a, att, Pinf, Pinftt, Pstar, Pstartt, start, last, presample, tol, ws, data_pattern)
+    kalman_filter!(Y, c, Z, H, d, T, R, Q, a, att, Pstar, Pstartt, t + 1, last, presample, ws, data_pattern)
     vlik = view(ws.lik, start + presample:last)
     return -0.5*sum(vlik)
 end
@@ -332,8 +357,11 @@ function diffuse_kalman_filter!(Y::AbstractArray{U},
                                 R::AbstractArray{U},
                                 Q::AbstractArray{U},
                                 a::AbstractArray{U},
+                                att::AbstractArray{U},
                                 Pinf::AbstractArray{U},
+                                Pinftt::AbstractArray{U},
                                 Pstar::AbstractArray{U},
+                                Pstartt::AbstractArray{U},
                                 start::V,
                                 last::V,
                                 presample::V,
@@ -344,5 +372,6 @@ function diffuse_kalman_filter!(Y::AbstractArray{U},
 
     m, n = size(Y)
     full_data_pattern = [collect(1:m) for i = 1:n]
-    diffuse_kalman_filter!(Y, c, Z, H, d, T, R, Q, a, Pinf, Pstar, start, last, presample, tol, ws, full_data_pattern)
+    lik = diffuse_kalman_filter!(Y, c, Z, H, d, T, R, Q, a, att, Pinf, Pinftt, Pstar, Pstartt, start, last, presample, tol, ws, full_data_pattern)
+    return lik
 end

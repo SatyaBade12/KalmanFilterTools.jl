@@ -63,10 +63,13 @@ H_0 = copy(H)
     H = zeros(ny, ny) + I(ny)
     
     ws1 = KalmanLikelihoodWs(ny, ns, np, nobs)
-    P = zeros(ns, ns, nobs+1)
-    s = copy(s_0)
-
-    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    P = zeros(ns, ns, nobs + 1)
+    s = zeros(ns, nobs + 1)
+    s[:, 1] .= s_0
+    Ptt = zeros(ns, ns, nobs)
+    stt = zeros(ns, nobs)
+    
+    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws1, full_data_pattern)
     @test P[:, :, 2] ≈ R*Q*R'
 
     P = zeros(ns, ns)
@@ -101,9 +104,12 @@ end
     
     ws1 = KalmanLikelihoodWs(ny, ns, np, nobs)
     P = zeros(ns, ns, nobs+1)
-    s = copy(s_0)
+    s = zeros(ns, nobs + 1)
+    s[:, 1] .= s_0
+    Ptt = zeros(ns, ns, nobs)
+    stt = zeros(ns, nobs)
 
-    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws1, full_data_pattern)
     @test P[:, :, 2] ≈ R*Q*R'
 
     P = zeros(ns, ns)
@@ -197,11 +203,14 @@ end
     c = zeros(ny)
     d = zeros(ns)
     s = copy(s_0)
+    stt = similar(s)
     P = copy(P_0)
+    Ptt = similar(P)
+    
     nobs1 = 1
     ws1 = KalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs1)
 
-    kalman_filter!(y, c, Z, H, d, T, R, Q, s, P, 1, nobs1, 0, ws1, full_data_pattern)
+    kalman_filter!(y, c, Z, H, d, T, R, Q, s, stt, P, Ptt, 1, nobs1, 0, ws1, full_data_pattern)
     
     cs = zeros(ny, nobs)
     Zs = zeros(ny, ns, nobs)
@@ -211,7 +220,9 @@ end
     Rs = zeros(ns, np, nobs)
     Qs = zeros(np, np, nobs)
     ss = zeros(ns, nobs + 1)
+    stt = zeros(ns, nobs)
     Ps = zeros(ns, ns, nobs + 1)
+    Ptt = zeros(ns, ns, nobs)
 
     for i = 1:nobs
         cs[:, i] = c
@@ -226,7 +237,7 @@ end
                     
     ss[:, 1] = s_0
     Ps[:, :, 1] = P_0
-    kalman_filter!(y, cs, Zs, Hs, ds, Ts, Rs, Qs, ss, Ps, 1, nobs1, 0, ws1, full_data_pattern)
+    kalman_filter!(y, cs, Zs, Hs, ds, Ts, Rs, Qs, ss, stt, Ps, Ptt, 1, nobs1, 0, ws1, full_data_pattern)
     @test ss[:, nobs1+1] ≈ s
     @test Ps[:, : , nobs1+1] ≈ P
 
@@ -283,7 +294,11 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     Pstar = copy(Pstar_0)
     copy!(ws4.QQ, R*Q*R')
     
-    t = KalmanFilterTools.diffuse_kalman_likelihood_init!(Y, Z, H, T, ws4.QQ, a, Pinf, Pstar, 1, nobs, 1e-8, ws4)
+    t = KalmanFilterTools.diffuse_kalman_likelihood_init!(Y, Z, H, T,
+                                                          ws4.QQ, a,
+                                                          Pinf, Pstar,
+                                                          1, nobs,
+                                                          1e-8, ws4)
     llk_3 = -0.5*(t*ny*log(2*pi) + sum(ws4.lik[1:t]))
 
     # Dynare returns minus log likelihood
@@ -293,10 +308,15 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
 
     c = zeros(ny)
     d = zeros(ns)
-    aa = repeat(a_0, 1, nobs)
-    PPinf = repeat(Pinf_0, 1, 1, nobs)
-    PPstar = repeat(Pstar_0, 1, 1, nobs)
-    t1 = KalmanFilterTools.diffuse_kalman_filter_init!(Y, c, Z, H, d, T, R, Q, aa, PPinf, PPstar, 1, nobs, 0, 1e-8, ws5, full_data_pattern)
+    aa = repeat(a_0, 1, nobs+1)
+    att = similar(aa)
+    PPinf = repeat(Pinf_0, 1, 1, nobs+1)
+    Pinftt = similar(PPinf)
+    PPstar = repeat(Pstar_0, 1, 1, nobs+1)
+    Pstartt = similar(PPstar)
+    t1 = KalmanFilterTools.diffuse_kalman_filter_init!(Y, c, Z, H, d, T, R, Q, aa, att,
+                                                       PPinf, Pinftt, PPstar, Pstartt,
+                                                       1, nobs, 0, 1e-8, ws5, full_data_pattern)
     @test t1 == t
     @test llk_3 ≈ -0.5*sum(ws5.lik[1:t1])
     @test aa[:, t1 + 1] ≈ vars["a"]
@@ -306,7 +326,8 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     a = copy(a_0)
     Pinf = copy(Pinf_0)
     Pstar = copy(Pstar_0)
-    t = KalmanFilterTools.diffuse_kalman_likelihood_init!(Y, z, H, T, ws4.QQ, a, Pinf, Pstar, 1, nobs, 1e-8, ws4)
+    t = KalmanFilterTools.diffuse_kalman_likelihood_init!(Y, z, H, T, ws4.QQ, a, Pinf, 
+                                                          Pstar, 1, nobs, 1e-8, ws4)
     llk_3 = -0.5*(t*ny*log(2*pi) + sum(ws4.lik[1:t]))
 
     # Dynare returns minus log likelihood
@@ -317,7 +338,8 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     aa = repeat(a_0, 1, nobs)
     PPinf = repeat(Pinf_0, 1, 1, nobs)
     PPstar = repeat(Pstar_0, 1, 1, nobs)
-    t1 = KalmanFilterTools.diffuse_kalman_filter_init!(Y, c, z, H, d, T, R, Q, aa, PPinf, PPstar, 1, nobs, 0, 1e-8, ws5, full_data_pattern)
+    t1 = KalmanFilterTools.diffuse_kalman_filter_init!(Y, c, z, H, d, T, R, Q, aa, att, PPinf, Pinftt,
+                                                       PPstar, Pstartt, 1, nobs, 0, 1e-8, ws5, full_data_pattern)
     @test t1 == t
     @test llk_3 ≈ -0.5*sum(ws5.lik[1:t1])
     @test aa[:, t1 + 1] ≈ vars["a"]
@@ -330,9 +352,12 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     
     aa = repeat(a_0, 1, nobs + 1)
     Pinf = copy(Pinf_0)
+    Pinftt = similar(Pinf)
     Pstar = copy(Pstar_0)
-
-    llk_4a = diffuse_kalman_filter!(Y, c, Z, H, d, T, R, Q, aa, Pinf, Pstar, 1, nobs, 0, 1e-8, ws5)
+    Pstartt = similar(Pstar)
+    
+    llk_4a = diffuse_kalman_filter!(Y, c, Z, H, d, T, R, Q, aa, att, Pinf, Pinftt, Pstar, Pstartt,
+                                    1, nobs, 0, 1e-8, ws5)
     @test llk_4a ≈ llk_4
    
     a = copy(a_0)
@@ -344,7 +369,7 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     aa = repeat(a_0, 1, nobs + 1)
     Pinf = copy(Pinf_0)
     Pstar = copy(Pstar_0)
-    llk_5a = diffuse_kalman_filter!(Y, c, z, H, d, T, R, Q, aa, Pinf, Pstar, 1, nobs, 0, 1e-8, ws5)
+    llk_5a = diffuse_kalman_filter!(Y, c, z, H, d, T, R, Q, aa, att, Pinf, Pinftt, Pstar, Pstartt, 1, nobs, 0, 1e-8, ws5)
     @test llk_5a ≈ llk_5
     
     a = copy(a_0)
