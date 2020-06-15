@@ -23,11 +23,11 @@ using LinearAlgebra
 using LinearAlgebra.BLAS
 
 export KalmanLikelihoodWs, FastKalmanLikelihoodWs, DiffuseKalmanLikelihoodWs
+export KalmanFilterWs, kalman_likelihood, kalman_likelihood_monitored
 export DiffuseKalmanFilterWs
-export KalmanSmootherWs, kalman_likelihood, kalman_likelihood_monitored
 export fast_kalman_likelihood, diffuse_kalman_likelihood
 export kalman_filter!, diffuse_kalman_filter!
-export kalman_smoother!
+export KalmanSmootherWs, DiffuseKalmanSmootherWs, kalman_smoother!
 
 abstract type KalmanWs{T, U} end
 

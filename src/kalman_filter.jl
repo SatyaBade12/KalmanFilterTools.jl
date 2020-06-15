@@ -1,4 +1,98 @@
 # Filters
+struct KalmanFilterWs{T, U} <: KalmanWs{T, U}
+    csmall::Vector{T}
+    Zsmall::Matrix{T}
+    # necessary for Z selecting vector with missing variables
+    iZsmall::Vector{U}
+    RQ::Matrix{T}
+    QQ::Matrix{T}
+    v::Matrix{T}
+    F::Matrix{T}
+    cholF::Matrix{T}
+    cholH::Matrix{T}
+    iF::Array{T}
+    iFv::Array{T}
+    a1::Vector{T}
+    r::Vector{T}
+    r1::Vector{T}
+    at_t::Matrix{T}
+    K::Array{T}
+    KDK::Array{T}
+    L::Matrix{T}
+    L1::Matrix{T}
+    N::Matrix{T}
+    N1::Matrix{T}
+    ZP::Matrix{T}
+    Kv::Matrix{T}
+    iFZ::Matrix{T}
+    PTmp::Matrix{T}
+    oldP::Matrix{T}
+    lik::Vector{T}
+    KT::Matrix{T}
+    D::Matrix{T}
+    ystar::Vector{T}
+    Zstar::Matrix{T}
+    Hstar::Matrix{T}
+    PZi::Vector{T}
+    tmp_np::Vector{T}
+    tmp_ns::Vector{T}
+    tmp_ny::Vector{T}
+    tmp_ns_np::AbstractArray{T}
+    tmp_ny_ny::AbstractArray{T}
+    tmp_ny_ns::AbstractArray{T}
+    kalman_tol::T
+    
+    function KalmanFilterWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
+        csmall = Vector{T}(undef, ny)
+        Zsmall = Matrix{T}(undef, ny, ns)
+        iZsmall = Vector{U}(undef, ny)
+        RQ = Matrix{T}(undef, ns, np)
+        QQ = Matrix{T}(undef, ns, ns)
+        F = Matrix{T}(undef, ny, ny)
+        cholF = Matrix{T}(undef, ny, ny)
+        cholH = Matrix{T}(undef, ny, ny)
+        iF = Array{T}(undef, ny, ny, nobs)
+        a1 = Vector{T}(undef, ns)
+        v = Matrix{T}(undef, ny, nobs)
+        iFv = Array{T}(undef, ny)
+        r = zeros(T, ns)
+        r1 = zeros(T, ns)
+        at_t = zeros(T, ns, nobs)
+        K = Array{T}(undef, ny, ns, nobs)
+        KDK = Array{T}(undef, ns, ny, nobs)
+        L = Matrix{T}(undef, ns, ns)
+        L1 = Matrix{T}(undef, ns, ns)
+        N = zeros(T, ns, ns)
+        N1 = zeros(T, ns, ns)
+        Kv = Matrix{T}(undef, ns, nobs)
+        PTmp = Matrix{T}(undef, ns, ns)
+        oldP = Matrix{T}(undef, ns, ns)
+        ZP = Matrix{T}(undef, ny, ns)
+        iFZ = Matrix{T}(undef, ny, ns)
+        lik = Vector{T}(undef, nobs)
+        KT = Matrix{T}(undef, ny, ns)
+        D = Matrix{T}(undef, ny, ny)
+        ystar = Vector{T}(undef, ny)
+        Zstar = Matrix{T}(undef, ny, ns)
+        Hstar = Matrix{T}(undef, ny, ny)
+        PZi = Vector{T}(undef, ns)
+        tmp_np = Vector{T}(undef, np)
+        tmp_ns = Vector{T}(undef, ns)
+        tmp_ny = Vector{T}(undef, ny)
+        tmp_ns_np = Matrix{T}(undef, ns, np)
+        tmp_ny_ny = Matrix{T}(undef, ny, ny)
+        tmp_ny_ns = Matrix{T}(undef, ny, ns)
+        kalman_tol = 1e-12
+
+        new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, cholH, iF,
+            iFv, a1, r, r1, at_t, K, KDK, L, L1, N, N1, ZP, Kv,
+            iFZ, PTmp, oldP, lik, KT, D, ystar, Zstar, Hstar, PZi,
+            tmp_np, tmp_ns, tmp_ny, tmp_ns_np, tmp_ny_ny, tmp_ny_ns,
+            kalman_tol)
+    end
+end
+
+KalmanFilterWs(ny, ns, np, nobs) = KalmanFilterWs{Float64, Int64}(ny, ns, np, nobs)
 
 function kalman_filter!(Y::AbstractArray{U},
                         c::AbstractArray{U},
@@ -26,7 +120,9 @@ function kalman_filter!(Y::AbstractArray{U},
     changeQ = ndims(Q) > 2
     changeA = ndims(a) > 1
     changeP = ndims(P) > 2
-
+    changeK = ndims(ws.K) > 2
+    changeiFv = ndims(ws.iFv) > 1
+    
     ny = size(Y, 1)
     nobs = last - start + 1
     ns = size(T,1)
@@ -59,17 +155,18 @@ function kalman_filter!(Y::AbstractArray{U},
         vP = changeP ? view(P, :, :, t) : view(P, :, :)
         vPtt = changeP ? view(Ptt, :, :, t) : view(Ptt, :, :)
         vP1 = changeP ? view(P, :, :, t + 1) : view(P, :, :)
+        vK = changeK ? view(ws.K, 1:ndata, :, t) : view(ws.K, 1:ndata, :)
         if changeR || changeQ
             get_QQ!(ws.QQ, vR, vQ, ws.RQ)
         end
+        viFv = changeiFv ? view(ws.iFv, 1:ndata, t) : view(ws.iFv, 1:ndata)
+            
         vv = view(ws.v, 1:ndata)
         vF = view(ws.F, 1:ndata, 1:ndata)
         vvH = view(vH, pattern, pattern)
         vZP = view(ws.ZP, 1:ndata, :)
         vcholF = view(ws.cholF, 1:ndata, 1:ndata, 1)
-        viFv = view(ws.iFv, 1:ndata)
-        vK = view(ws.K, 1:ndata, :, 1)
-
+    
         # v  = Y[:,t] - c - Z*a
         get_v!(vv, Y, vc, vZsmall, va, t, pattern)
         if !steady
@@ -106,13 +203,15 @@ function kalman_filter!(Y::AbstractArray{U},
                 # P = T*Ptt*T + QQ
                 update_P!(vP1, vT, vPtt, ws.QQ, ws.PTmp)
                 ws.oldP .-= vP1
-                if norm(ws.oldP) < ns*eps()
+                if norm(ws.oldP) < 0#ns*eps()
                     steady = true
                 end
             elseif t > 1
-                copy!(vP1, vP)
-                vPtt1 = view(ws.Ptt, :, : , t-1)
-                copy!(vPtt, vPtt1)
+                if changeP
+                    copy!(vP1, vP)
+                    vPtt1 = view(Ptt, :, : , t-1)
+                    copy!(vPtt, vPtt1)
+                end
             end
         end
         t += 1
@@ -131,7 +230,7 @@ struct DiffuseKalmanFilterWs{T, U} <: KalmanWs{T, U}
     v::Vector{T}
     F::Matrix{T}
     iF::Matrix{T}
-    iFv::Vector{T}
+    iFv::Matrix{T}
     a1::Vector{T}
     cholF::Matrix{T}
     cholH::Matrix{T}
@@ -163,7 +262,7 @@ struct DiffuseKalmanFilterWs{T, U} <: KalmanWs{T, U}
         v = Vector{T}(undef, ny)
         F = Matrix{T}(undef, ny, ny)
         iF = Matrix{T}(undef, ny,ny )
-        iFv = Vector{T}(undef, ny)
+        iFv = Matrix{T}(undef, ny, nobs)
         a1 = Vector{T}(undef, ns)
         cholF = Matrix{T}(undef, ny, ny)
         cholH = Matrix{T}(undef, ny, ny)

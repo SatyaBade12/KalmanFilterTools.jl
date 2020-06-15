@@ -63,13 +63,14 @@ H_0 = copy(H)
     H = zeros(ny, ny) + I(ny)
     
     ws1 = KalmanLikelihoodWs(ny, ns, np, nobs)
+    ws2 = KalmanFilterWs(ny, ns, np, nobs)
     P = zeros(ns, ns, nobs + 1)
     s = zeros(ns, nobs + 1)
     s[:, 1] .= s_0
     Ptt = zeros(ns, ns, nobs)
     stt = zeros(ns, nobs)
     
-    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws1, full_data_pattern)
+    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws2, full_data_pattern)
     @test P[:, :, 2] ≈ R*Q*R'
 
     P = zeros(ns, ns)
@@ -103,13 +104,14 @@ end
     H = H'*H
     
     ws1 = KalmanLikelihoodWs(ny, ns, np, nobs)
+    ws2 = KalmanFilterWs(ny, ns, np, nobs)
     P = zeros(ns, ns, nobs+1)
     s = zeros(ns, nobs + 1)
     s[:, 1] .= s_0
     Ptt = zeros(ns, ns, nobs)
     stt = zeros(ns, nobs)
 
-    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws1, full_data_pattern)
+    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws2, full_data_pattern)
     @test P[:, :, 2] ≈ R*Q*R'
 
     P = zeros(ns, ns)
@@ -208,7 +210,7 @@ end
     Ptt = similar(P)
     
     nobs1 = 1
-    ws1 = KalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs1)
+    ws1 = KalmanFilterWs{Float64, Int64}(ny, ns, np, nobs1)
 
     kalman_filter!(y, c, Z, H, d, T, R, Q, s, stt, P, Ptt, 1, nobs1, 0, ws1, full_data_pattern)
     
@@ -244,22 +246,24 @@ end
     ws2 = KalmanSmootherWs{Float64, Int64}(ny, ns, np, nobs)
     ss1 = zeros(ns, nobs+1)
     ss1[:, 1] = s_0
+    stt = similar(ss1)
     Ps1 = similar(Ps)
     Ps1[:, :, 1] = P_0
+    Ptt = similar(Ps1)
     alphah = zeros(ns, nobs)
     epsilonh = zeros(ny, nobs)
     etah = zeros(np, nobs)
     Valpha = zeros(ns, ns, nobs)
     Vepsilon = zeros(ny, ny, nobs)
     Veta = zeros(np, np, nobs)
-    kalman_smoother!(y, cs, Zs, Hs, ds, Ts, Rs, Qs, ss1, Ps1, alphah, epsilonh, etah, Valpha, Vepsilon, Veta, 1, nobs, 0, ws2, full_data_pattern)
+    kalman_smoother!(y, cs, Zs, Hs, ds, Ts, Rs, Qs, ss1, stt, Ps1, Ptt, alphah, epsilonh, etah, Valpha, Vepsilon, Veta, 1, nobs, 0, ws2, full_data_pattern)
     @test ss1[:, nobs1 + 1] ≈ s
     @test Ps1[:, : , nobs1+1] ≈ P
 
     for i = 1:nobs
         Hs[:, :, i] = zeros(ny, ny)
     end
-    kalman_smoother!(y, cs, Zs, Hs, ds, Ts, Rs, Qs, ss1, Ps1, alphah, epsilonh, etah, Valpha, Vepsilon, Veta, 1, nobs, 0, ws2, full_data_pattern)
+    kalman_smoother!(y, cs, Zs, Hs, ds, Ts, Rs, Qs, ss1, stt, Ps1, Ptt, alphah, epsilonh, etah, Valpha, Vepsilon, Veta, 1, nobs, 0, ws2, full_data_pattern)
     @test y ≈ view(alphah, [4, 3, 2], :)
 end
 
