@@ -289,7 +289,7 @@ end
 
 full_data_pattern = [collect(1:ny) for o = 1:nobs]
 
-@testset "Diffuse Kalman Filter" begin
+@testset "Diffuse Kalman Filter and Smoother" begin
     ws4 = DiffuseKalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
     ws5 = DiffuseKalmanFilterWs{Float64, Int64}(ny, ns, np, nobs)
     
@@ -409,6 +409,31 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     Pstar = copy(Pstar_0)
     llk_5 = diffuse_kalman_likelihood(Y, z, H, T, R, Q, a, Pinf, Pstar, 1, nobs, 0, 1e-8, ws4, full_data_pattern)
     @test llk_5 ≈ llk_4 
+
+    ws6 = DiffuseKalmanSmootherWs{Float64, Int64}(ny, ns, np, nobs)
+
+    a = copy(a_0)
+    Pinf = zeros(ns, ns, nobs + 1)
+    Pinftt = zeros(ns, ns, nobs + 1)
+    Pstar = zeros(ns, ns, nobs + 1)
+    Pstartt = zeros(ns, ns, nobs + 1)
+    Pinf[:, :, 1] = Pinf_0
+    Pinftt[:, :, 1] = Pinf_0
+    Pstar[:, :, 1] = Pstar_0
+    Pstartt[:, :, 1] =  Pstar_0
+    alphah = zeros(ns, nobs)
+    epsilonh = zeros(ny, nobs)
+    etah = zeros(np, nobs)
+    Valphah = zeros(ns, ns, nobs)
+    Vepsilonh = zeros(ny, ny, nobs)
+    Vetah = zeros(np, np, nobs)
+    llk_6 = diffuse_kalman_smoother!(Y, c, z, H, d, T, R, Q, aa, att,
+                                     Pinf, Pinftt, Pstar, Pstartt,
+                                     alphah, epsilonh, etah, Valphah,
+                                     Vepsilonh, Vetah, 1, nobs, 0,
+                                     1e-8, ws6)
+    @test llk_6 ≈ llk_4 
+
 end
 
 @testset "start and last" begin

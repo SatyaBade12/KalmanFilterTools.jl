@@ -28,6 +28,7 @@ export DiffuseKalmanFilterWs
 export fast_kalman_likelihood, diffuse_kalman_likelihood
 export kalman_filter!, diffuse_kalman_filter!
 export KalmanSmootherWs, DiffuseKalmanSmootherWs, kalman_smoother!
+export diffuse_kalman_smoother!
 
 abstract type KalmanWs{T, U} end
 

@@ -22,6 +22,16 @@ r1 = randn(ns)
 KalmanFilterTools.get_alphah!(alphah, a, P, r1)
 @test alphah ≈ a + P*r1
 
+# alphah_t = a_t + Pstar_t*r0_{t-1} + Pinf_t*r1_{t-1}     (DK 5.24)
+alphah = randn(ns)
+a = randn(ns)
+Pstar = randn(ns, ns)
+Pinf = randn(ns, ns)
+r0 = randn(ns)
+r1 = randn(ns)
+KalmanFilterTools.get_alphah!(alphah, a, Pstar, Pinf, r0, r1)
+@test alphah ≈ a + Pstar*r0 + Pinf*r1
+
 F = randn(ny, ny)
 F = F'*F
 cholF = zeros(ny, ny)
@@ -42,6 +52,14 @@ tmp = randn(ny, ns)
 KalmanFilterTools.get_D!(D, cholF.U, K, T, N, KT, tmp)
 @test D ≈ inv(F) + K*T*N*T'*K'
 
+# D_t = KDKinf_t'*N0_t*KDKinf_t    (DK p. 135)
+D = randn(ny, ny)
+KDKinf = randn(ns, ny)
+N0 = randn(ns, ns)
+Tmp = randn(ny, ns)
+KalmanFilterTools.get_D!(D, KDKinf,  N0, Tmp)
+@test D ≈ KDKinf'*N0*KDKinf
+
 # epsilonh_t = H*(iF_t*v_t - K_t*T*r_t)
 epsilon = randn(ny)
 H = randn(ny, ny)
@@ -54,6 +72,14 @@ tmp1 = zeros(ny)
 tmp2 = zeros(ns)
 KalmanFilterTools.get_epsilonh!(epsilon, H, iFv, K, T, r, tmp1, tmp2)
 @test epsilon ≈ H*(iFv - K*T*r)
+
+# epsilon_t = -H_t*KDKinf*r0_t         (DK p. 135)
+H = randn(ny, ny)
+KDKinf = randn(ns, ny)
+r0 = randn(ns)
+tmp = randn(ny)
+KalmanFilterTools.get_epsilonh!(epsilon, H, KDKinf, r0, tmp)
+@test epsilon ≈ - H*KDKinf'*r0
 
 # etah = Q*R'*r_t
 eta = randn(np)
@@ -90,6 +116,29 @@ Pinf = randn(ns, ns)
 KalmanFilterTools.get_F!(F, ZP, Z, Pinf)
 @test F ≈ Z*Pinf*Z'
 @test ZP ≈ Z*Pinf
+
+# iFZ = inv(F)*Z
+Z = randn(2, 5)
+F = randn(2, 2)
+F = F'*F
+iFZ = randn(2, 5)
+cholF = similar(F)
+KalmanFilterTools.get_cholF!(cholF, F)
+KalmanFilterTools.get_iFZ!(iFZ, cholF, Z)
+@test iFZ ≈ F\Z
+
+# iFZ = inv(F)*z
+z = [2, 4]
+F = randn(2, 2)
+F = F'*F
+iFZ = randn(2, 5)
+cholF = similar(F)
+KalmanFilterTools.get_cholF!(cholF, F)
+KalmanFilterTools.get_iFZ!(iFZ, cholF, z)
+Z = zeros(2, 5)
+Z[1, 2] = 1.0
+Z[2, 4] = 1.0
+@test iFZ ≈ F\Z
 
 # iFv = inv(F)*v
 F = randn(ny, ny)
@@ -158,7 +207,7 @@ Ptt = randn(ns, ns)
 P - randn(ns, ns)
 K = randn(ny, ns)
 ZP = randn(ny, ns)
-get_updated_Ptt!(Ptt, P, K, ZP)
+KalmanFilterTools.get_updated_Ptt!(Ptt, P, K, ZP)
 @test Ptt ≈ P - transpose(K)*ZP
 
 # Pstartt = Pstar-Pstar*Z'*Kinf-Pinf*Z'*Kstar                           %(5.14) DK(2012)
@@ -168,7 +217,9 @@ ZPstar = randn(ny, ns)
 Kinf = randn(ny, ns)
 ZPinf = randn(ny, ns)
 Kstar = randn(ny, ns)
-KalmanFilterTools.get_updated_Pstartt!(Pstartt, Pstar, ZPstar, Kinf, ZPinf, Kstar)
+Pinftt = randn(ns, ns)
+PTmp = randn(ns, ns)
+KalmanFilterTools.get_updated_Pstartt!(Pstartt, Pstar, ZPstar, Kinf, ZPinf, Kstar, Pinftt, PTmp)
 @test Pstartt ≈ Pstar - transpose(ZPstar)*Kinf - transpose(ZPinf)*Kstar
 
 # V_t = P_t - P_t*N_{t-1}*P_t
@@ -180,6 +231,27 @@ Ptmp = Matrix{Float64}(undef, ns, ns)
 KalmanFilterTools.get_Valpha!(V, P, N1, Ptmp)
 @test V ≈ P - P*N1*P
 
+# Valpha_t = Pstar_t - Pstar_t*N0_{t-1}*Pstar_t
+#            -(Pinf_t*N1_{t-1}*Pstar_t)'
+#            -Pinf_t*N1_{t-1}*Pstar_t
+#            -Pinf_t*N2_{t-1}*Pinf_t                       (DK 5.30)
+Valpha = randn(ns, ns)
+Pstar = randn(ns, ns)
+Pstar = Pstar'*Pstar
+Pinf = randn(ns, ns)
+Pinf = Pinf'*Pinf
+N0 = randn(ns, ns)
+N0 = N0'*N0
+N1 = randn(ns, ns)
+N1 = N1'*N1
+N2 = randn(ns, ns)
+N2 = N2'*N2
+Tmp = randn(ns, ns)
+KalmanFilterTools.get_Valpha!(Valpha, Pstar, Pinf,N0, N1, N2, Tmp)
+@test Valpha ≈ (Pstar - Pstar*N0*Pstar - (Pinf*N1*Pstar)'
+                - Pinf*N1*Pstar - Pinf*N2*Pinf)
+
+# QQ = R*Q*R'
 R = randn(ns, np)
 Q = randn(np, np)
 Q = Q'*Q
@@ -301,11 +373,61 @@ KalmanFilterTools.update_N!(N1, Z, iFZ, L, N, Ptmp)
 @test N1 ≈ Z'*iFZ + L'*N*L
 
 iFZ1 = iFZ[z, :]
+KalmanFilterTools.update_N!(N1, z, iFZ1, L, N, Ptmp)
 ZiFZ = zeros(ns, ns)
 ZiFZ[z, :] .= iFZ1
-KalmanFilterTools.update_N!(N1, z, iFZ1, L, N, Ptmp)
+Z = zeros(ny, ns)
+for i=1:length(z)
+    Z[i, z[i]] = 1.0
+end
+@test ZiFZ ≈ Z'iFZ1
 @test N1 ≈ ZiFZ + L'*N*L
 
+
+# N0_{t-1} = L0_t'N0_t*L0_t (DK 5.29)
+N0 = randn(ns, ns)
+L0 = randn(ns, ns)
+N0_1 = randn(ns, ns)
+PTmp = randn(ns, ns)
+KalmanFilterTools.update_N0!(N0, L0, N0_1, PTmp)
+@test N0 ≈ L0'*N0_1*L0
+
+# F1 = inv(Finf)
+# N1_{t-1} = Z'*F1*Z + L0'*N1_t*L0 + L1'*N0_t*L0
+N1 = randn(ns, ns)
+Z = randn(ny, ns)
+F = randn(ny, ny)
+F = 0.5*(F + F')
+iFZ = F\Z
+L0 = randn(ns, ns)
+N1_1 = randn(ns, ns)
+L1 = randn(ns, ns)
+N0_1 = randn(ns, ns)
+PTmp = randn(ns, ns)
+KalmanFilterTools.update_N1!(N1, Z, iFZ, L0, N1_1, L1, N0_1, PTmp)
+@test iFZ ≈ inv(F)*Z
+@test N1 ≈ Z'*inv(F)*Z + L0'*N1_1*L0 + L1'*N0_1*L0
+
+# F2 = -inv(Finf)*Fstar*inv(Finv)
+# N2_{t-1} = Z'*F2*Z + L0'*N2_t*L0 + L0'*N1_t*L1
+#            + L1'*N1_t*L0 + L1'*N0_t*L1
+N2 = randn(ns, ns)
+Z = randn(ny, ns)
+F = randn(ny, ny)
+F = 0.5*(F + F')
+iFZ = F\Z
+Fstar = randn(ny, ny)
+L0 = randn(ns, ns)
+N0_1 = randn(ns, ns)
+N1_1 = randn(ns, ns)
+N2_1 = randn(ns, ns)
+Tmp1 = randn(ny, ns)
+Tmp2 = randn(ns, ns)
+KalmanFilterTools.update_N2!(N2, iFZ, Fstar, L0, N2_1, N1_1,
+                             L1, N0_1, Tmp1, Tmp2)
+@test iFZ ≈ inv(F)*Z
+@test N2 ≈ (-Z'*inv(F)*Fstar*inv(F)*Z + L0'*N2_1*L0 + L0'*N1_1*L1
+            + L1'*N1_1*L0 + L1'*N0_1*L1)
 
 P_0 = similar(P)
 PTmp = similar(P)
@@ -323,15 +445,24 @@ KalmanFilterTools.update_P!(vP1, vT, QQ, vK, vZP, PTmp)
 
 # P = T*Ptt*T' + QQ
 P = randn(ns, ns)
-T = randn(ns ns)
+T = randn(ns, ns)
 Ptt = randn(ns, ns)
 QQ = randn(ns, ns)
-KalmanFilterTools.update_P!(P, T, Ptt, QQ)
+PTmp = randn(ns, ns)
+KalmanFilterTools.update_P!(P, T, Ptt, QQ, PTmp)
 @test P ≈ T*Ptt*transpose(T) + QQ
+
+# Pinf = T*Pinftt*T'
+P = randn(ns, ns)
+T = randn(ns, ns)
+Ptt = randn(ns, ns)
+PTmp = randn(ns, ns)
+KalmanFilterTools.update_P!(P, T, Ptt, PTmp)
+@test P ≈ T*Ptt*transpose(T)
 
 # r_{t-1} = Z_t'*iF_t*v_t + L_t'r_t
 r = randn(ns)
-r1 = similar(r)
+r1 = randn(ns)
 Z = randn(ny, ns)
 iFv = randn(ny)
 KalmanFilterTools.update_r!(r1, Z, iFv, L, r)
@@ -344,6 +475,17 @@ KalmanFilterTools.update_r!(r1, z, iFv1, L, r)
 ZiF = zeros(ns)
 ZiF[z] .= iFv1
 @test r1 ≈ ZiF + L'r
+
+# rstar_{t-1} = Z_t'*iFinf_t*v_t + Linf_t'rstar_t + Lstar_t'*rinf_t      (DK 5.21)
+rstar = randn(ns)
+Z = randn(ny, ns)
+iFv = randn(ny)
+Linf = randn(ns, ns)
+rstar1 = randn(ns)
+Lstar = randn(ns, ns)
+rinf1 = randn(ns)
+KalmanFilterTools.update_r!(rstar, Z, iFv, Linf, rstar1, Lstar, rinf1)
+@test rstar ≈ Z'*iFv + Linf'*rstar1 + Lstar'*rinf1
 
 # W = T(W - K'*iF*Z*W)
 #K2 = K1  + T*W*M_0*W'*Z'
@@ -394,3 +536,23 @@ Kinf = randn(ny,ns)
 PTmp = randn(ns, ns)
 KalmanFilterTools.update_Pinf!(Pinf, T, ZPinf, Kinf, PTmp)
 @test Pinf ≈ T*(PinfOrig - ZPinf'*Kinf)*T'
+
+# rstar_{t-1} = Z_t'*iFinf_t*v_t + Linf_t'rstar_t + Lstar_t'*rinf_t (DK 5.21)
+rstar = randn(ns)
+Z = randn(ny, ns)
+iFv = randn(ny)
+Linf = randn(ns, ns)
+rstar1 = randn(ns)
+Lstar = randn(ns, ns)
+rinf1 = randn(ns)
+KalmanFilterTools.update_r!(rstar, Z, iFv, Linf, rstar1, Lstar, rinf1)
+@test rstar ≈ Z'*iFv + Linf'*rstar1 + Lstar'*rinf1
+
+
+
+
+
+
+
+    
+

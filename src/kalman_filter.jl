@@ -112,7 +112,6 @@ function kalman_filter!(Y::AbstractArray{U},
                        ws::KalmanWs,
                        data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer}
     changeC = ndims(c) > 1
-    changeZ = ndims(Z) > 2
     changeH = ndims(H) > 2
     changeD = ndims(d) > 1
     changeT = ndims(T) > 2
@@ -142,8 +141,7 @@ function kalman_filter!(Y::AbstractArray{U},
         ndata = length(pattern)
         vc = changeC ? view(c, :, t) : view(c, :)
         ws.csmall .= view(vc, pattern)
-        vZ = changeZ ? view(Z, :, :, t) : view(Z, :, :)
-        vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, vZ, pattern, ndata, ny)
+        vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny, t)
         vH = changeH ? view(H, :, :, t) : view(H, :, :)
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
         vR = changeR ? view(R, :, :, t) : view(R, :, :)
@@ -232,7 +230,7 @@ struct DiffuseKalmanFilterWs{T, U} <: KalmanWs{T, U}
     iF::Matrix{T}
     iFv::Matrix{T}
     a1::Vector{T}
-    cholF::Matrix{T}
+    cholF::Array{T}
     cholH::Matrix{T}
     ZP::Matrix{T}
     Fstar::Matrix{T}
@@ -264,7 +262,7 @@ struct DiffuseKalmanFilterWs{T, U} <: KalmanWs{T, U}
         iF = Matrix{T}(undef, ny,ny )
         iFv = Matrix{T}(undef, ny, nobs)
         a1 = Vector{T}(undef, ns)
-        cholF = Matrix{T}(undef, ny, ny)
+        cholF = Array{T}(undef, ny, ny, nobs)
         cholH = Matrix{T}(undef, ny, ny)
         ZP = Matrix{T}(undef, ny, ns)
         Fstar = Matrix{T}(undef, ny, ny)
@@ -309,7 +307,7 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
                                      last::V,
                                      presample::V,
                                      tol::U,
-                                     ws::DiffuseKalmanFilterWs,
+                                     ws::KalmanWs,
                                      data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat,
                                                                              V <: Integer,
                                                                              W <: Real}
@@ -338,7 +336,7 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
         ndata = length(pattern)
         vc = changeC ? view(c, :, t) : view(c, :)
         ws.csmall .= view(vc, pattern)
-        vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny)
+        vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny, t)
         vH = changeH ? view(H, :, :, t) : view(H, :, :)
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
         vR = changeR ? view(R, :, :, t) : view(R, :, :)
@@ -358,8 +356,7 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
         vPstar1 = changePstar ? view(Pstar, :, :, t + 1) : view(Pstar, :, :)
         vv = view(ws.v, 1:ndata)
         vvH = view(vH, pattern, pattern)
-        vZP = view(ws.ZP, 1:ndata, :)
-        vcholF = view(ws.cholF, 1:ndata, 1:ndata, 1)
+        vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
         viFv = view(ws.iFv, 1:ndata)
         vFinf = view(ws.F, 1:ndata, 1:ndata)
         vFstar = view(ws.Fstar, 1:ndata, 1:ndata)
@@ -389,7 +386,7 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
         else
             ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF))
             # Kinf   = iFinf*Z*Pinf                                   %define Kinf'=T^{-1}*K_0 with M_{\infty}=Pinf*Z'
-            copy!(vKinf, vZP)
+            copy!(vKinf, vZPinf)
             LAPACK.potrs!('U', vcholF, vKinf)
             # Fstar  = Z*Pstar*Z' + H;                                        %(5.7) DK(2012)
             get_F!(vFstar, vZPstar, vZsmall, vPstar, vH)
@@ -433,7 +430,7 @@ function diffuse_kalman_filter!(Y::AbstractArray{U},
                                 last::V,
                                 presample::V,
                                 tol::U,
-                                ws::DiffuseKalmanFilterWs,
+                                ws::KalmanWs,
                                 data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat,
                                                                         V <: Integer,
                                                                         W <: Real}
@@ -465,7 +462,7 @@ function diffuse_kalman_filter!(Y::AbstractArray{U},
                                 last::V,
                                 presample::V,
                                 tol::U,
-                                ws::DiffuseKalmanFilterWs) where {U <: AbstractFloat,
+                                ws::KalmanWs) where {U <: AbstractFloat,
                                                                         V <: Integer,
                                                                         W <: Real}
 

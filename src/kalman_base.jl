@@ -12,6 +12,15 @@ function get_alphah!(alphah::AbstractVector{T}, a::AbstractVector{T}, P::Abstrac
     mul!(alphah,P, r, 1.0, 1.0)
 end
 
+# alphah_t = a_t + Pstar_t*r0_{t-1} + Pinf_t*r1_{t-1}     (DK 5.24)
+function get_alphah!(valphah::AbstractVector{T}, va::AbstractVector{T},
+                     vPstar::AbstractMatrix{T}, vPinf::AbstractMatrix{T},
+                     r0::AbstractVector{T}, r1::AbstractVector{T}) where T <: AbstractFloat
+    copy!(valphah, va)
+    mul!(valphah, vPstar, r0, 1.0, 1.0)
+    mul!(valphah, vPinf, r1, 1.0, 1.0)
+end
+
 function get_cholF!(cholF::AbstractArray{T}, F::AbstractArray{T}) where T <: AbstractFloat
     cholF .= 0.5.*(F .+ transpose(F))
     info = LAPACK.potrf!('U', cholF)
@@ -42,6 +51,12 @@ function get_D!(D::AbstractMatrix{U}, iF::AbstractMatrix{U}, K::AbstractMatrix{U
     mul!(D, tmp, K, 1.0, 1.0)
 end
 
+# D_t = KDKinf_t'*N0_t*KDKinf_t    (DK p. 135)
+function get_D!(D::AbstractMatrix{T}, KDKinf::AbstractMatrix{T},  N0::AbstractMatrix{T}, Tmp::AbstractMatrix{T}) where T <: AbstractFloat
+    mul!(Tmp, Transpose(KDKinf), N0)
+    mul!(D, Tmp, KDKinf)
+end
+
 # epsilon_h = H*(iF_t*v_t - K(DK)_t'*r_t) (DK 4.69)
 function get_epsilonh!(epsilon::AbstractVector{U}, H::AbstractMatrix{U},
                        iFv::AbstractVector{U}, K::AbstractMatrix{U},
@@ -63,6 +78,14 @@ function get_epsilonh!(epsilon::AbstractVector{U}, H::AbstractMatrix{U},
     mul!(tmp2, T, r)
     mul!(tmp1, K, tmp2, -1.0, 1.0)
     mul!(epsilon, H, tmp1)
+end
+
+# epsilon_t = -H_t*KDKinf'*r0_t         (DK p. 135)
+function get_epsilonh!(epsilon::AbstractVector{T}, H::AbstractMatrix{T},
+                       KDKinf::AbstractMatrix{T}, r0::AbstractVector{T},
+                       tmp::AbstractVector{T}) where T <: AbstractFloat
+    mul!(tmp, transpose(KDKinf), r0)
+    mul!(epsilon, H, tmp, -1.0, 0.0)
 end
 
 # etah = Q*R'*r_t
@@ -144,6 +167,15 @@ function get_iFZ!(iFZ::AbstractArray{T}, cholF::AbstractArray{T}, Z::AbstractArr
     LAPACK.potrs!('U', cholF, iFZ)
 end
 
+function get_iFZ!(iFZ::AbstractArray{T}, cholF::AbstractArray{T}, z::AbstractVector{U}) where {T <: AbstractFloat, U <: Integer}
+    n = length(z)
+    fill!(iFZ, 0.0)
+    @inbounds @simd for i = 1:n
+        iFZ[i, z[i]] = 1.0
+    end
+    LAPACK.potrs!('U', cholF, iFZ)
+end
+
 # K = iF*Z*P
 function get_K!(K::AbstractArray{T}, ZP::AbstractArray{T}, cholF::AbstractArray{T}) where T <: AbstractFloat
     copy!(K, ZP)
@@ -163,35 +195,52 @@ function get_Kstar!(Kstar::AbstractArray{T}, z::AbstractVector{U}, Pstar::Abstra
 end
 
 # L_t = T - K(DK)_t*Z (DK 4.29)
-function get_L!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, Z::AbstractArray{U}, L1::AbstractArray{U}) where U <: AbstractFloat
+function get_L!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, Z::AbstractArray{U}) where U <: AbstractFloat
     copy!(L, T)
-    gemm!('N', 'N', -1.0, K, Z, 1.0, L)
+    mul!(L, K, Z, -1.0, 1.0)
+end
+
+# L_t = T - K(DK)_t*z (DK 4.29)
+function get_L!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, z::AbstractArray{W}) where {U <: AbstractFloat, W <: Integer}
+    copy!(L, T)
+    for j = 1:length(z)
+        zj = z[j]
+        for i = 1:size(L, 1)
+            L[i, zj] += K[i, j]
+        end
+    end
 end
 
 # L = T(I - K'*Z)
-function get_L_alternative!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, Z::AbstractArray{U}, L1::AbstractArray{U}) where U <: AbstractFloat
-    fill!(L1, 0.0)
-    @inbounds @simd for i = 1:size(L1, 1)
-        L1[i,i] = 1.0
+function get_L_alternative!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, Z::AbstractArray{U}, Tmp::AbstractArray{U}) where U <: AbstractFloat
+    fill!(Tmp, 0.0)
+    @inbounds @simd for i = 1:size(Tmp, 1)
+        Tmp[i,i] = 1.0
     end
-    gemm!('T', 'N', -1.0, K, Z, 1.0, L1)
-    mul!(L, T, L1)
+    mul!(Tmp, transpose(K), Z, -1.0, 1.0)
+    mul!(L, T, Tmp)
 end
 
 # L = T(I - K'*z)
-function get_L!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, z::AbstractArray{W}, L1::AbstractArray{U}) where {U <: AbstractFloat, W <: Integer}
+function get_L!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, z::AbstractArray{W}, Tmp::AbstractArray{U}) where {U <: AbstractFloat, W <: Integer}
     m, n = size(K)
-    fill!(L1, 0.0)
+    fill!(Tmp, 0.0)
     @inbounds for j = 1:m
         zj = z[j]
         @simd for k=1:n
-            L1[k, zj] = -K[j, k]
+            Tmp[k, zj] = -K[j, k]
         end
     end
     @inbounds @simd for i = 1:n
-        L1[i,i] += 1.0
+        Tmp[i,i] += 1.0
     end
-    mul!(L, T, L1)
+    mul!(L, T, Tmp)
+end
+
+# L1_t = - KDK*Z (DK 5.12)
+function get_L1!(L1::AbstractMatrix{T}, KDK::AbstractMatrix{T}, Zsmall::AbstractVector{U}) where {T <: AbstractFloat, U <: Integer}
+    vL1 = view(L1, :, Zsmall)
+    vL1 .= -KDK
 end
 
 function get_M!(y::AbstractArray{T}, x::AbstractArray{T}, work::AbstractArray{T}) where T <: AbstractFloat
@@ -328,6 +377,23 @@ function get_Valpha!(V::AbstractArray{T}, P::AbstractArray{T}, N::AbstractArray{
     gemm!('N', 'N', -1.0, Ptmp, P, 1.0, V)
 end
 
+# Valpha_t = Pstar_t - Pstar_t*N0_{t-1}*Pstar_t
+#            -(Pinf_t*N1_{t-1}*Pstar_t)' -Pinf_t*N1_{t-1}*Pstar_t -
+#            -Pinf_t*N2_{t-1}*Pinf_t                      (DK 5.30)
+function get_Valpha!(Valpha::AbstractMatrix{T},
+                     Pstar::AbstractMatrix{T},
+                     Pinf::AbstractMatrix{T}, N0::AbstractMatrix{T},
+                     N1::AbstractMatrix{T}, N2::AbstractMatrix{T},
+                     Tmp::AbstractMatrix{T}) where T <: AbstractFloat
+    copy!(Valpha, Pstar)
+    mul!(Tmp, Pstar, N0)
+    mul!(Tmp, Pinf, N1, 1.0, 1.0)
+    mul!(Valpha, Tmp, Pstar, -1.0, 1.0)
+    mul!(Tmp, Pstar, N1)
+    mul!(Tmp, Pinf, N2, 1.0, 1.0)
+    mul!(Valpha, Tmp, Pinf, -1.0, 1.0)
+end
+
 # Vepsilon_t = H - H*D_t*H
 function get_Vepsilon!(Vepsilon::AbstractArray{T}, H::AbstractArray{T}, D::AbstractArray{T}, tmp::AbstractArray{T}) where T <: AbstractFloat
     copy!(Vepsilon, H)
@@ -405,7 +471,7 @@ end
 # a = d + T*att
 function update_a!(a1::AbstractVector{U}, d::AbstractVector{U}, T::AbstractMatrix{U}, att::AbstractVector{U}) where U <: AbstractFloat
     copy!(a1, d)
-    mul!(a1, T, att)
+    mul!(a1, T, att, 1.0, 1.0)
 end
 
 # a = d + a + K'*v
@@ -442,15 +508,62 @@ end
 function update_N!(N1::AbstractArray{T}, Z::AbstractArray{T}, iFZ::AbstractArray{T}, L::AbstractArray{T}, N::AbstractArray{T}, Ptmp::AbstractArray{T}) where T <: AbstractFloat
     mul!(N1, transpose(Z), iFZ)
     mul!(Ptmp, transpose(L), N)
-    gemm!('N', 'N', 1.0, Ptmp, L, 1.0, N1)
+    mul!(N1, Ptmp, L, 1.0, 1.0)
 end
 
-function update_N!(N1::AbstractArray{T}, z::AbstractArray{U}, iFZ::AbstractArray{T}, L::AbstractArray{T}, N::AbstractArray{T}, Ptmp::AbstractArray{T}) where {T <: AbstractFloat, U <: Integer}
+function update_N!(N1::AbstractArray{T}, z::AbstractVector{U}, iFZ::AbstractArray{T}, L::AbstractArray{T}, N::AbstractArray{T}, Tmp::AbstractArray{T}) where {T <: AbstractFloat, U <: Integer}
     fill!(N1, 0.0)
     vN1 = view(N1, z, :)
     vN1 .= iFZ
-    mul!(Ptmp, transpose(L), N)
-    gemm!('N', 'N', 1.0, Ptmp, L, 1.0, N1)
+    mul!(Tmp, transpose(L), N)
+    mul!(N1, Tmp, L, 1.0, 1.0)
+end
+
+# N0_{t-1} = L0_t'N0_t*L0_t (DK 5.29)
+function update_N0!(N0, L0, N0_1, PTmp)
+    mul!(PTmp, transpose(L0), N0_1)
+    mul!(N0, PTmp, L0)
+end
+
+# F1 = inv(Finf)
+# N1_{t-1} = Z'*F1*Z + L0'*N1_t*L0 + L1'*N0_t*L0
+function update_N1!(N1::AbstractMatrix{T}, Z::AbstractMatrix{T},
+                    iFZ::AbstractMatrix{T}, L0::AbstractMatrix{T},
+                    N1_1::AbstractMatrix{T}, L1::AbstractMatrix{T},
+                    N0_1::AbstractMatrix{T}, PTmp::AbstractMatrix{T}) where T <: AbstractFloat
+    mul!(N1, transpose(Z), iFZ)
+    mul!(PTmp, transpose(L0), N1_1)
+    mul!(PTmp, transpose(L1), N0_1, 1.0, 1.0)
+    mul!(N1, PTmp, L0, 1.0, 1.0)
+end
+
+function update_N1!(N1::AbstractMatrix{T}, z::AbstractVector{U},
+                    iFZ::AbstractMatrix{T}, L0::AbstractMatrix{T},
+                    N1_1::AbstractMatrix{T}, L1::AbstractMatrix{T},
+                    N0_1::AbstractMatrix{T}, PTmp::AbstractMatrix{T}) where {T <: AbstractFloat, U <: Integer}
+    vN1 = view(N1, z, :)
+    vN1 .= iFZ
+    mul!(PTmp, transpose(L0), N1_1)
+    mul!(PTmp, transpose(L1), N0_1, 1.0, 1.0)
+    mul!(N1, PTmp, L0, 1.0, 1.0)
+end
+
+# F2 = -inv(Finf)*Fstar*inv(Finv)
+# N2_{t-1} = Z'*F2*Z + L0'*N2_t*L0 + L0'*N1_t*L1
+#            + L1'*N1_t*L0 + L1'*N0_t*L1
+function update_N2!(N2::AbstractMatrix{T}, iFZ::AbstractMatrix{T},
+                    Fstar::AbstractMatrix{T}, L0::AbstractMatrix{T},
+                    N2_1::AbstractMatrix{T}, N1_1::AbstractMatrix{T},
+                    L1::AbstractMatrix{T}, N0_1::AbstractMatrix{T},
+                    Tmp1::AbstractMatrix{T}, Tmp2::AbstractMatrix{T}) where T <: AbstractFloat
+    mul!(Tmp1, Fstar, iFZ) 
+    mul!(N2, transpose(iFZ), Tmp1, -1.0, 0.0)
+    mul!(Tmp2, transpose(L0), N2_1)
+    mul!(Tmp2, transpose(L1), N1_1, 1.0, 1.0)
+    mul!(N2, Tmp2, L0, 1.0, 1.0)
+    mul!(Tmp2, transpose(L0), N1_1)
+    mul!(Tmp2, transpose(L1), N0_1, 1.0, 1.0)
+    mul!(N2, Tmp2, L1, 1.0, 1.0)
 end
 
 # P = T*(P - K'*Z*P)*T'+ QQ
@@ -480,7 +593,7 @@ function update_P!(P::AbstractMatrix{U}, T::AbstractMatrix{U}, Ptt::AbstractMatr
     mul!(P, T, Ptmp)
 end
 
-# Pstar  = T*(Pstar-Pstar*Z'*Kinf-Pinf*Z'*Kstar)*T'+QQ;         %(5.14) DK(2012)
+# Pstar  = T*(Pstar-Pstar*Z'*Kinf-Pinf*Z'*Kstar)*T'+QQ         (5.14) DK(2012)
 function update_Pstar!(Pstar, T, ZPinf, ZPstar, Kinf, Kstar, QQ, PTmp)
     copy!(PTmp, Pstar)
     mul!(PTmp, transpose(ZPstar), Kinf, -1.0, 1.0)
@@ -491,7 +604,7 @@ function update_Pstar!(Pstar, T, ZPinf, ZPstar, Kinf, Kstar, QQ, PTmp)
     mul!(Pstar, PTmp, transpose(T), 1.0, 1.0)
 end
 
-# Pinf   = T*(Pinf-Pinf*Z'*Kinf)*T';                             %(5.14) DK(2012)
+# Pinf   = T*(Pinf-Pinf*Z'*Kinf)*T'                             (5.14) DK(2012)
 function update_Pinf!(Pinf, T, ZPinf, Kinf, PTmp)
     mul!(Pinf, transpose(ZPinf), Kinf, -1.0, 1.0) 
     mul!(PTmp, T, Pinf)
@@ -510,6 +623,27 @@ function update_r!(r1::AbstractVector{T}, z::AbstractVector{U}, iFv::AbstractVec
     vr1 = view(r1, z)
     vr1 .= iFv
     gemm!('T', 'N', 1.0, L, r, 1.0, r1)
+end
+
+# rstar_{t-1} = Z_t'*iFinf_t*v_t + Linf_t'rstar_t + Lstar_t'*rinf_t      (DK 5.21)
+function update_r!(rstar::AbstractVector{T}, Z::AbstractMatrix{T},
+                   iFv::AbstractVector{T}, Linf::AbstractMatrix{T},
+                   rstar1::AbstractVector{T}, Lstar::AbstractMatrix{T},
+                   rinf1::AbstractVector{T}) where T <: AbstractFloat
+    mul!(rstar, transpose(Z), iFv)
+    mul!(rstar, transpose(Linf), rstar1, 1.0, 1.0)
+    mul!(rstar, transpose(Lstar), rinf1, 1.0, 1.0)
+end
+
+# rstar_{t-1} = z_t'*iFinf_t*v_t + Linf_t'rstar_t + Lstar_t'*rinf_t      (DK 5.21)
+function update_r!(rstar::AbstractVector{T}, z::AbstractVector{U},
+                   iFv::AbstractVector{T}, Linf::AbstractMatrix{T},
+                   rstar1::AbstractVector{T}, Lstar::AbstractMatrix{T},
+                   rinf1::AbstractVector{T}) where {T <: AbstractFloat, U <: Integer}
+    vrstar = view(rstar, z)
+    vrstar .= iFv
+    mul!(rstar, transpose(Linf), rstar1, 1.0, 1.0)
+    mul!(rstar, transpose(Lstar), rinf1, 1.0, 1.0)
 end
 
 # W = T(W - K'*iF*Z*W)
