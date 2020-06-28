@@ -8,7 +8,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     QQ::Matrix{T}
     v::Matrix{T}
     F::Matrix{T}
-    cholF::Matrix{T}
+    cholF::Array{T}
     cholH::Matrix{T}
     iF::Array{T}
     iFv::Array{T}
@@ -49,7 +49,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
         RQ = Matrix{T}(undef, ns, np)
         QQ = Matrix{T}(undef, ns, ns)
         F = Matrix{T}(undef, ny, ny)
-        cholF = Matrix{T}(undef, ny, ny)
+        cholF = Array{T}(undef, ny, ny, nobs)
         cholH = Matrix{T}(undef, ny, ny)
         iF = Array{T}(undef, ny, ny, nobs)
         a1 = Vector{T}(undef, ns)
@@ -137,7 +137,7 @@ function kalman_smoother!(Y::AbstractArray{U},
     fill!(ws.N_1,0.0)
 
     ny = size(Y, 1)
-    for t = last: -1: 1
+    for t = last: -1: start
         #inputs
         pattern = data_pattern[t]
         ndata = length(pattern)
@@ -154,8 +154,10 @@ function kalman_smoother!(Y::AbstractArray{U},
         vR = changeR ? view(R, :, :, t) : view(R, :, :)
         vK = view(ws.K, 1:ndata, :, t)
         vKDK = view(ws.KDK, :, 1:ndata, 1) # amounts to K_t (4.22): here KDK = T*K'
+        vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
         viF = view(ws.iF, 1:ndata, 1:ndata, t)
         viFv = view(ws.iFv, 1:ndata, t)
+        viFZ = view(ws.iFZ, 1:ndata, :)
 
         mul!(vKDK, vT, transpose(vK))
 
@@ -167,8 +169,8 @@ function kalman_smoother!(Y::AbstractArray{U},
             length(epsilonh) > 0 ||
             length(etah) > 0)
             # N_{t-1} = Z_t'iF_t*Z_t + L_t'N_t*L_t (DK 4.44)
-            get_iFZ!(ws.iFZ, viF, vZsmall)
-            update_N!(ws.N, vZsmall, ws.iFZ, ws.L, ws.N_1, ws.PTmp)
+            get_iFZ!(viFZ, vcholF, vZsmall)
+            update_N!(ws.N, vZsmall, viFZ, ws.L, ws.N_1, ws.PTmp)
         end
         if length(epsilonh) > 0
             vepsilonh = view(epsilonh, :, t)
@@ -176,6 +178,7 @@ function kalman_smoother!(Y::AbstractArray{U},
             get_epsilonh!(vepsilonh, vH, viFv, vKDK, ws.r_1, ws.tmp_ny, ws.tmp_ns)
             if length(Vepsilon) > 0
                 vVepsilon = view(Vepsilon,:,:,t)
+                get_iF!(viF, vcholF)
                 # D_t = inv(F_t) + KDK_t'*N_t*KDK_t (DK 4.69)
                 get_D!(ws.D, viF, vKDK,  ws.N_1, ws.tmp_ny_ns)
                 # Vepsilon_t = H - H*D_t*H (DK 4.69)
@@ -389,7 +392,6 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{U},
     N2 = ws.N2
     N2_1 = ws.N2_1
 
-    fill!(r0_1, 0.0)
     fill!(r1_1, 0.0)
 
     ny = size(Y, 1)
@@ -418,7 +420,7 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{U},
         vFstar =view(ws.Fstar, 1:ndata, 1:ndata, t)
         viF = view(ws.iF, 1:ndata, 1:ndata, t)
         vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
-        viFv = view(ws.iFv, 1:ndata)
+        viFv = view(ws.iFv, 1:ndata, t)
 
         mul!(vKDKinf, vT, transpose(vKinf))
         mul!(vKDK, vT, transpose(vK))
@@ -429,9 +431,9 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{U},
         get_L!(L0, vT, vKDKinf, vZsmall)
         # L1_t = - KDK*Z (DK 5.12)
         get_L1!(L1, vKDK, vZsmall)
-        # r_{t-1} = Z_t'*iFinf_t*v_t + L0_t'r_t + L1_t'*r0_t  (DK 5.21)
-        update_r!(r1, vZsmall, viFv, L1, r1_1, L0, r0_1)
-        # rinf_{t-1} = L0_t'rinf_t (DK 5.21)
+        # r1_{t-1} = Z_t'*iFinf_t*v_t + L0_t'r1_t + L1_t'*r0_t  (DK 5.21)
+        update_r!(r1, vZsmall, viFv, L0, r1_1, L1, r0_1)
+        # r0_{t-1} = L0_t'r0_t (DK 5.21)
         mul!(r0, L0, r0_1)
         if (length(alphah) > 0 ||
             length(epsilonh) > 0 ||
@@ -478,7 +480,7 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{U},
         if length(alphah) > 0
             valphah = view(alphah, :, t)
             # alphah_t = a_t + Pstar_t*r0_{t-1} + Pinf_t*r1_{t-1}     (DK 5.24)
-            get_alphah!(valphah, va, vPstar, vPinf, r0, r1,)
+            get_alphah!(valphah, va, vPstar, vPinf, r0, r1)
         end
 
         if length(Valpha) > 0

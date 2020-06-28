@@ -333,7 +333,7 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     t = KalmanFilterTools.diffuse_kalman_likelihood_init!(Y, z, H, T, ws4.QQ, a, Pinf, 
                                                           Pstar, 1, nobs, 1e-8, ws4)
     llk_3 = -0.5*(t*ny*log(2*pi) + sum(ws4.lik[1:t]))
-
+    @show llk_3
     # Dynare returns minus log likelihood
     @test llk_3 ≈ -vars["dLIK"]
     @test a ≈ vars["a"]
@@ -381,7 +381,7 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     Pstar = copy(Pstar_0)
 
     t = KalmanFilterTools.diffuse_kalman_likelihood_init!(Y, Z, H, T, ws4.QQ, a, Pinf, Pstar, 1, nobs, 1e-8, ws4, full_data_pattern)
-    llk_3 = -0.5*(t*ny*log(2*pi) + sum(ws4.lik[1:t]))
+    llk_3 = -0.5*sum(ws4.lik[1:t])
 
     # Dynare returns minus log likelihood
     @test llk_3 ≈ -vars["dLIK"]
@@ -392,7 +392,7 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     Pinf = copy(Pinf_0)
     Pstar = copy(Pstar_0)
     t = KalmanFilterTools.diffuse_kalman_likelihood_init!(Y, z, H, T, ws4.QQ, a, Pinf, Pstar, 1, nobs, 1e-8, ws4, full_data_pattern)
-    llk_3 = -0.5*(t*ny*log(2*pi) + sum(ws4.lik[1:t]))
+    llk_3 = -0.5*sum(ws4.lik[1:t])
 
     # Dynare returns minus log likelihood
     @test llk_3 ≈ -vars["dLIK"]
@@ -412,8 +412,9 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
 
     ws6 = DiffuseKalmanSmootherWs{Float64, Int64}(ny, ns, np, nobs)
 
-    a = copy(a_0)
-    Pinf = zeros(ns, ns, nobs + 1)
+    aa = zeros(ns, nobs + 1)
+    aa[:, 1] .= a_0
+        Pinf = zeros(ns, ns, nobs + 1)
     Pinftt = zeros(ns, ns, nobs + 1)
     Pstar = zeros(ns, ns, nobs + 1)
     Pstartt = zeros(ns, ns, nobs + 1)
@@ -427,13 +428,37 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     Valphah = zeros(ns, ns, nobs)
     Vepsilonh = zeros(ny, ny, nobs)
     Vetah = zeros(np, np, nobs)
-    llk_6 = diffuse_kalman_smoother!(Y, c, z, H, d, T, R, Q, aa, att,
-                                     Pinf, Pinftt, Pstar, Pstartt,
-                                     alphah, epsilonh, etah, Valphah,
-                                     Vepsilonh, Vetah, 1, nobs, 0,
-                                     1e-8, ws6)
-    @test llk_6 ≈ llk_4 
+    llk_6a = diffuse_kalman_smoother!(Y, c, Z, H, d, T, R, Q, aa, att,
+                                      Pinf, Pinftt, Pstar, Pstartt,
+                                      alphah, epsilonh, etah, Valphah,
+                                      Vepsilonh, Vetah, 1, nobs, 0,
+                                      1e-8, ws6)
+    @test llk_6a ≈ llk_4 
+    @test Y ≈ alphah[z, :]
 
+    aa = zeros(ns, nobs + 1)
+    aa[:, 1] .= a_0
+        Pinf = zeros(ns, ns, nobs + 1)
+    Pinftt = zeros(ns, ns, nobs + 1)
+    Pstar = zeros(ns, ns, nobs + 1)
+    Pstartt = zeros(ns, ns, nobs + 1)
+    Pinf[:, :, 1] = Pinf_0
+    Pinftt[:, :, 1] = Pinf_0
+    Pstar[:, :, 1] = Pstar_0
+    Pstartt[:, :, 1] =  Pstar_0
+    alphah = zeros(ns, nobs)
+    epsilonh = zeros(ny, nobs)
+    etah = zeros(np, nobs)
+    Valphah = zeros(ns, ns, nobs)
+    Vepsilonh = zeros(ny, ny, nobs)
+    Vetah = zeros(np, np, nobs)
+    llk_6b = diffuse_kalman_smoother!(Y, c, z, H, d, T, R, Q, aa, att,
+                                      Pinf, Pinftt, Pstar, Pstartt,
+                                      alphah, epsilonh, etah, Valphah,
+                                      Vepsilonh, Vetah, 1, nobs, 0,
+                                      1e-8, ws6)
+    @test llk_6b ≈ llk_4 
+    @test Y ≈ alphah[z, :]
 end
 
 @testset "start and last" begin
@@ -441,7 +466,7 @@ end
     ws1 = KalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
 
     P_0 = randn(ns, ns)
-    P_0 = P_0'P_0
+    P_0 = P_0'*P_0
     
     a = copy(a_0)
     P = copy(P_0)
@@ -494,5 +519,6 @@ end
 
 @testset "smoother" begin
 end    
+
 nothing
 

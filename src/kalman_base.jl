@@ -206,7 +206,7 @@ function get_L!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, z
     for j = 1:length(z)
         zj = z[j]
         for i = 1:size(L, 1)
-            L[i, zj] += K[i, j]
+            L[i, zj] -= K[i, j]
         end
     end
 end
@@ -238,8 +238,12 @@ function get_L!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, z
 end
 
 # L1_t = - KDK*Z (DK 5.12)
-function get_L1!(L1::AbstractMatrix{T}, KDK::AbstractMatrix{T}, Zsmall::AbstractVector{U}) where {T <: AbstractFloat, U <: Integer}
-    vL1 = view(L1, :, Zsmall)
+function get_L1!(L1::AbstractMatrix{T}, KDK::AbstractMatrix{T}, Z::AbstractMatrix{T}) where T <: AbstractFloat
+    mul!(L1, KDK, Z, -1.0, 0.0)
+end
+
+function get_L1!(L1::AbstractMatrix{T}, KDK::AbstractMatrix{T}, z::AbstractVector{U}) where {T <: AbstractFloat, U <: Integer}
+    vL1 = view(L1, :, z)
     vL1 .= -KDK
 end
 
@@ -625,25 +629,25 @@ function update_r!(r1::AbstractVector{T}, z::AbstractVector{U}, iFv::AbstractVec
     gemm!('T', 'N', 1.0, L, r, 1.0, r1)
 end
 
-# rstar_{t-1} = Z_t'*iFinf_t*v_t + Linf_t'rstar_t + Lstar_t'*rinf_t      (DK 5.21)
-function update_r!(rstar::AbstractVector{T}, Z::AbstractMatrix{T},
-                   iFv::AbstractVector{T}, Linf::AbstractMatrix{T},
-                   rstar1::AbstractVector{T}, Lstar::AbstractMatrix{T},
-                   rinf1::AbstractVector{T}) where T <: AbstractFloat
-    mul!(rstar, transpose(Z), iFv)
-    mul!(rstar, transpose(Linf), rstar1, 1.0, 1.0)
-    mul!(rstar, transpose(Lstar), rinf1, 1.0, 1.0)
+# r1_{t-1} = Z_t'*iFinf_t*v_t + L0_t'r1_t + L1_t'*0_t      (DK 5.21)
+function update_r!(r1::AbstractVector{T}, Z::AbstractMatrix{T},
+                   iFv::AbstractVector{T}, L0::AbstractMatrix{T},
+                   r1_1::AbstractVector{T}, L1::AbstractMatrix{T},
+                   r0_1::AbstractVector{T}) where T <: AbstractFloat
+    mul!(r1, transpose(Z), iFv)
+    mul!(r1, transpose(L0), r1_1, 1.0, 1.0)
+    mul!(r1, transpose(L1), r0_1, 1.0, 1.0)
 end
 
-# rstar_{t-1} = z_t'*iFinf_t*v_t + Linf_t'rstar_t + Lstar_t'*rinf_t      (DK 5.21)
-function update_r!(rstar::AbstractVector{T}, z::AbstractVector{U},
-                   iFv::AbstractVector{T}, Linf::AbstractMatrix{T},
-                   rstar1::AbstractVector{T}, Lstar::AbstractMatrix{T},
-                   rinf1::AbstractVector{T}) where {T <: AbstractFloat, U <: Integer}
-    vrstar = view(rstar, z)
-    vrstar .= iFv
-    mul!(rstar, transpose(Linf), rstar1, 1.0, 1.0)
-    mul!(rstar, transpose(Lstar), rinf1, 1.0, 1.0)
+# r1_{t-1} = z_t'*iFinf_t*v_t + L0_t'r1_t + L1_t'*r0_t      (DK 5.21)
+function update_r!(r1::AbstractVector{T}, z::AbstractVector{U},
+                   iFv::AbstractVector{T}, L0::AbstractMatrix{T},
+                   r1_1::AbstractVector{T}, L1::AbstractMatrix{T},
+                   r0_1::AbstractVector{T}) where {T <: AbstractFloat, U <: Integer}
+    vr1 = view(r1, z)
+    vr1 .= iFv
+    mul!(r1, transpose(L0), r1_1, 1.0, 1.0)
+    mul!(r1, transpose(L1), r0_1, 1.0, 1.0)
 end
 
 # W = T(W - K'*iF*Z*W)

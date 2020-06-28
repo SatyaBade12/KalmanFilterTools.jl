@@ -8,7 +8,7 @@ struct KalmanFilterWs{T, U} <: KalmanWs{T, U}
     QQ::Matrix{T}
     v::Matrix{T}
     F::Matrix{T}
-    cholF::Matrix{T}
+    cholF::Array{T}
     cholH::Matrix{T}
     iF::Array{T}
     iFv::Array{T}
@@ -49,7 +49,7 @@ struct KalmanFilterWs{T, U} <: KalmanWs{T, U}
         RQ = Matrix{T}(undef, ns, np)
         QQ = Matrix{T}(undef, ns, ns)
         F = Matrix{T}(undef, ny, ny)
-        cholF = Matrix{T}(undef, ny, ny)
+        cholF = Array{T}(undef, ny, ny, nobs)
         cholH = Matrix{T}(undef, ny, ny)
         iF = Array{T}(undef, ny, ny, nobs)
         a1 = Vector{T}(undef, ns)
@@ -159,11 +159,11 @@ function kalman_filter!(Y::AbstractArray{U},
         end
         viFv = changeiFv ? view(ws.iFv, 1:ndata, t) : view(ws.iFv, 1:ndata)
             
-        vv = view(ws.v, 1:ndata)
+        vv = view(ws.v, 1:ndata, t)
         vF = view(ws.F, 1:ndata, 1:ndata)
         vvH = view(vH, pattern, pattern)
         vZP = view(ws.ZP, 1:ndata, :)
-        vcholF = view(ws.cholF, 1:ndata, 1:ndata, 1)
+        vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
     
         # v  = Y[:,t] - c - Z*a
         get_v!(vv, Y, vc, vZsmall, va, t, pattern)
@@ -225,7 +225,7 @@ struct DiffuseKalmanFilterWs{T, U} <: KalmanWs{T, U}
     QQ::Matrix{T}
     RQ::Matrix{T}
     c::Vector{T}
-    v::Vector{T}
+    v::Matrix{T}
     F::Matrix{T}
     iF::Matrix{T}
     iFv::Matrix{T}
@@ -257,7 +257,7 @@ struct DiffuseKalmanFilterWs{T, U} <: KalmanWs{T, U}
         QQ = Matrix{T}(undef, ns, ns)
         RQ = Matrix{T}(undef, ns, np)
         c = Vector{T}(undef, ny)
-        v = Vector{T}(undef, ny)
+        v = Matrix{T}(undef, ny, nobs)
         F = Matrix{T}(undef, ny, ny)
         iF = Matrix{T}(undef, ny,ny )
         iFv = Matrix{T}(undef, ny, nobs)
@@ -354,17 +354,17 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
         vPstar = changePstar ? view(Pstar, :, :, t) : view(Pstar, :, :)
         vPstartt = changePstar ? view(Pstartt, :, :, t) : view(Pstartt, :, :)
         vPstar1 = changePstar ? view(Pstar, :, :, t + 1) : view(Pstar, :, :)
-        vv = view(ws.v, 1:ndata)
+        vv = view(ws.v, 1:ndata, t)
         vvH = view(vH, pattern, pattern)
         vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
-        viFv = view(ws.iFv, 1:ndata)
+        viFv = view(ws.iFv, 1:ndata, t)
         vFinf = view(ws.F, 1:ndata, 1:ndata)
         vFstar = view(ws.Fstar, 1:ndata, 1:ndata)
         vZPinf = view(ws.ZP, 1:ndata, :)
         vZPstar = view(ws.ZPstar, 1:ndata, :)
-        vcholF = view(ws.cholF, 1:ndata, 1:ndata, 1)
-        vcholH = view(ws.cholH, 1:ndata, 1:ndata, 1)
-        viFv = view(ws.iFv, 1:ndata)
+        vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
+        vcholH = changeH ? view(ws.cholH, 1:ndata, 1:ndata, t) : view(ws.cholH, 1:ndata, 1:ndata)
+        viFv = view(ws.iFv, 1:ndata, t)
         vKinf = view(ws.Kinf, 1:ndata, :, 1)
         vKstar = view(ws.K, 1:ndata, :, 1)
 
@@ -394,8 +394,9 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
             # note that there is a typo in DK (2003) with "+ Kinf" instead of "- Kinf",
             # but it is correct in their appendix
             get_Kstar!(vKstar, vZsmall, vPstar, vFstar, vKinf, vcholF)
+            # att = a + Kinf*v                                                (5.13) DK(2012)
             get_updated_a!(vatt, va, vKinf, vv)
-            # a = d + T*att
+            # a1 = d + T*att                                                  (5.13) DK(2012) 
             update_a!(va1, vd, vT, vatt)
             # Pinf_tt = Pinf - Kinf'*Z*Pinf                                    %(5.14) DK(2012)
             get_updated_Ptt!(vPinftt, vPinf, vKinf, vZPinf)
@@ -409,7 +410,7 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
         end
         t += 1
     end
-    t
+    return t
 end
 
 function diffuse_kalman_filter!(Y::AbstractArray{U},

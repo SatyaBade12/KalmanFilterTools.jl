@@ -182,6 +182,20 @@ LAPACK.potrf!('U', cholF)
 KalmanFilterTools.get_Kstar!(Kstar, z, Pstar, Fstar, K, cholF)
 @test Kstar ≈ F\(Pstar[z,:] - Fstar*K)
 
+# L_t = T - K(DK)_t*Z (DK 4.29)
+z = [2, 3, 1]
+Z = zeros(ny, ns)
+for i=1:length(z)
+    Z[i, z[i]] = 1.0
+end
+T = randn(ns, ns)
+KDK = randn(ns, ny)
+L = Matrix{Float64}(undef, ns, ns)
+KalmanFilterTools.get_L!(L, T, KDK, Z)
+@test L ≈ T - KDK*Z
+KalmanFilterTools.get_L!(L, T, KDK, z)
+@test L ≈ T - KDK*Z
+
 Z = randn(ny, ns)
 T = randn(ns, ns)
 K = randn(ny, ns)
@@ -196,6 +210,7 @@ K2 = zeros(ns, ns)
 K2[z,:] .= K1
 KalmanFilterTools.get_L!(L, T, K1, z, L1)
 @test L ≈ T - T*K2'
+
 
 M = rand(ny, ny)
 ZW = rand(ny, ny)

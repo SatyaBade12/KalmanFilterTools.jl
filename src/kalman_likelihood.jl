@@ -285,7 +285,7 @@ function kalman_likelihood_monitored(Y::AbstractArray{U},
         if !steady
             # F  = Z*P*Z' + H
             get_F!(vF, vZP, Z, P, vH)
-            info = get_cholF!(ws.cholF, ws.F)
+            info = get_cholF!(vcholF, ws.F)
             if info != 0
                 # F is near singular
                 if !cholHset
@@ -656,6 +656,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
     t = start
     iy = (start - 1)*ny + 1
     diffuse_kalman_tol = 1e-8
+    l2pi = log(2*pi)
     kalman_tol = 1e-8
     while t <= last
         pattern = data_pattern[t]
@@ -685,7 +686,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
                 ws.lik[t] += ndata*l2pi + univariate_step(Y, t, vZsmall, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, pattern, ws, pattern)
             end
         else
-            ws.lik[t] = log(det_from_cholesky(ws.cholF))
+            ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF))
             # Kinf   = iFinf*Z*Pinf                                   %define Kinf'=T^{-1}*K_0 with M_{\infty}=Pinf*Z'
             copy!(vK, vZP)
             LAPACK.potrs!('U', vcholF, vK)
