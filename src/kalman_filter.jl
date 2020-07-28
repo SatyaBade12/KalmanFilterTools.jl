@@ -106,11 +106,11 @@ function kalman_filter!(Y::AbstractArray{U},
                         att::AbstractArray{U},
                         P::AbstractArray{U},
                         Ptt::AbstractArray{U},
-                       start::V,
-                       last::V,
-                       presample::V,
-                       ws::KalmanWs,
-                       data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer}
+                        start::V,
+                        last::V,
+                        presample::V,
+                        ws::KalmanWs,
+                        data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer}
     changeC = ndims(c) > 1
     changeH = ndims(H) > 2
     changeD = ndims(d) > 1
@@ -120,6 +120,7 @@ function kalman_filter!(Y::AbstractArray{U},
     changeA = ndims(a) > 1
     changeP = ndims(P) > 2
     changeK = ndims(ws.K) > 2
+    changeF = ndims(ws.F) > 2
     changeiFv = ndims(ws.iFv) > 1
     
     ny = size(Y, 1)
@@ -136,7 +137,6 @@ function kalman_filter!(Y::AbstractArray{U},
     copy!(ws.oldP, vP)
     cholHset = false
     while t <= last
-
         pattern = data_pattern[t]
         ndata = length(pattern)
         vc = changeC ? view(c, :, t) : view(c, :)
@@ -160,7 +160,7 @@ function kalman_filter!(Y::AbstractArray{U},
         viFv = changeiFv ? view(ws.iFv, 1:ndata, t) : view(ws.iFv, 1:ndata)
             
         vv = view(ws.v, 1:ndata, t)
-        vF = view(ws.F, 1:ndata, 1:ndata)
+        vF = changeF ? view(ws.F, 1:ndata, 1:ndata, t) : view(ws.F, 1:ndata, 1:ndata)
         vvH = view(vH, pattern, pattern)
         vZP = view(ws.ZP, 1:ndata, :)
         vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
@@ -321,7 +321,9 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
     changeA = ndims(a) > 1
     changePinf = ndims(Pinf) > 2
     changePstar = ndims(Pstar) > 2
-
+    changeFinf = ndims(ws.F) > 2
+    changeFstar = ndims(ws.Fstar) > 2
+    
     ny = size(Y, 1)
     t = start
     vR = view(R, :, :, 1)
@@ -358,15 +360,15 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
         vvH = view(vH, pattern, pattern)
         vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
         viFv = view(ws.iFv, 1:ndata, t)
-        vFinf = view(ws.F, 1:ndata, 1:ndata)
-        vFstar = view(ws.Fstar, 1:ndata, 1:ndata)
+        vFinf = changeFinf ? view(ws.F, 1:ndata, 1:ndata, t) : view(ws.F, 1:ndata, 1:ndata)
+        vFstar = changeFstar ? view(ws.Fstar, 1:ndata, 1:ndata, t) : view(ws.Fstar, 1:ndata, 1:ndata)
         vZPinf = view(ws.ZP, 1:ndata, :)
         vZPstar = view(ws.ZPstar, 1:ndata, :)
         vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
         vcholH = changeH ? view(ws.cholH, 1:ndata, 1:ndata, t) : view(ws.cholH, 1:ndata, 1:ndata)
         viFv = view(ws.iFv, 1:ndata, t)
-        vKinf = view(ws.Kinf, 1:ndata, :, 1)
-        vKstar = view(ws.K, 1:ndata, :, 1)
+        vKinf = view(ws.Kinf, 1:ndata, :, t)
+        vKstar = view(ws.K, 1:ndata, :, t)
 
         # v  = Y[:,t] - c - Z*a
         get_v!(vv, Y, vc, vZsmall, va, t, pattern)
@@ -374,9 +376,10 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
         get_F!(vFinf, vZPinf, vZsmall, vPinf)
         info = get_cholF!(vcholF, vFinf)
         if info > 0
-            if norm(ws.F) < tol
+            if norm(vFinf) < tol
                 return t - 1
             else
+                vcholF[1] = NaN
                 if !cholHset
                     get_cholF!(vcholH, vvH)
                     cholHset = true
@@ -400,13 +403,16 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
             update_a!(va1, vd, vT, vatt)
             # Pinf_tt = Pinf - Kinf'*Z*Pinf                                    %(5.14) DK(2012)
             get_updated_Ptt!(vPinftt, vPinf, vKinf, vZPinf)
-            # Pinf = T*Ptt*T
+            # Pinf = T*Ptt*T'
             update_P!(vPinf1, vT, vPinftt, ws.PTmp)
             # Pstartt = Pstar-Pstar*Z'*Kinf-Pinf*Z'*Kstar                           %(5.14) DK(2012)
             get_updated_Pstartt!(vPstartt, vPstar, vZPstar, vKinf, vZPinf,
                                  vKstar, vPinftt, ws.PTmp)
-            # Pinf = T*Ptt*T + QQ
+            # Pstar = T*Pstartt*T' + QQ
             update_P!(vPstar1, vT, vPstartt, ws.QQ, ws.PTmp)
+            if norm(vPinf1) < tol
+                return t
+            end
         end
         t += 1
     end

@@ -325,7 +325,8 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     @test llk_3 ≈ -0.5*sum(ws5.lik[1:t1])
     @test aa[:, t1 + 1] ≈ vars["a"]
     @test PPstar[:, :, t1 + 1] ≈ vars["Pstar1"]
-
+    display(PPstar[:,:,t1+1])
+    display(vars["Pstar1"])
     z = [4, 3]
     a = copy(a_0)
     Pinf = copy(Pinf_0)

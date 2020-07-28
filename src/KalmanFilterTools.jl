@@ -33,9 +33,9 @@ export diffuse_kalman_smoother!
 abstract type KalmanWs{T, U} end
 
 include("kalman_base.jl")
-include("univariate_step.jl")
 include("kalman_likelihood.jl")
 include("kalman_filter.jl")
 include("kalman_smoother.jl")
+include("univariate_step.jl")
 
 end #module
