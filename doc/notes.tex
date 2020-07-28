@@ -1,0 +1,287 @@
+\documentclass{article}
+\usepackage{amsmath}
+
+\begin{document}
+\section{Basic filter}
+In Durbin and Koopmans (2012)
+\begin{align*}
+  \nu_t &= y_t - Z_t a_t & \mbox{(DK2012 4.13)}\\
+  F_t &= Z_tP_tZ'_t + H_t & \mbox{(DK2012 4.16)}\\
+  a_{t|t} &= a_t + P_tZ'_t F^{-1}_t\nu_t & \mbox{(DK2012 4.17)}\\
+  P_{t|t} &= P_t - P_tZ'_t F^{-1}_tZ_tP_t & \mbox{(DK2012 4.18)}\\
+  K_t &= T_tP_tZ'_t F^{-1}_t & \mbox{(DK2012 4.22)}\\
+  a_{t+1} &= T_ta_t + K_t\nu_t & \mbox{(DK2012 4.21)}\\
+  P_{t+1} &= T_tP_t(T_t - K_tZ_t)' + R_tQ_tR_t' & \mbox{(DK2012 4.23)}
+\end{align*}
+
+Our in place algorithm
+\begin{align*}
+  \nu_t &= y_t - c_t - Z_t a_t \\
+  ZP &= Z_tP_t \\
+  F_t &= ZPZ'_t + H_t \\
+  iF\nu_t &= F^{-1}_t\nu_t\\
+  \tilde K_t &= F^{-1}_tZP & \mbox{alternative } K\\           
+  a_{t|t} &= a_t + \tilde K'_t\nu_t)  \\
+  P_{t|t} &= P_t - \tilde K'_t (ZP) \\
+  a_{t+1} &= d_t + T_ta_{t|t}\\
+  P_{t+1} &= T_tP_{t|t}T_t + R_tQ_tR_t' 
+\end{align*}
+
+\section{Diffuse filter}
+In Durbin and Koopmans (2012)
+\begin{align*}
+  \nu^{(0)}_t &= y_t - Z_t a^{(0)}_t & \mbox{(DK2012 p. 128)}\\
+  F_{\infty,t} &= Z_tP_{\infty,t}Z'_t & \mbox{(DK2012 5.7)}\\
+  F_{\star,t} &= Z_tP_{\star,t}Z'_t + H_t & \mbox{(DK2012 5.7)}\\
+  M_{\infty,t } &= P_{\infty,t}Z'_t & \mbox{(DK2012 5.7)}\\
+  M_{\star,t } &= P_{\star,t}Z'_t & \mbox{(DK2012 5.7)}\\
+\end{align*}
+When $F^{-1}_{\infty,t}$ is regular
+\begin{align*}
+  F^{(1)}_t &= F^{-1}_{\infty, t} & \mbox{(DK2012 5.10)}\\
+  F^{(2)}_t &=  -F^{-1}_{\infty, t}F_{\star, t}F^{-1}_{\infty, t} & \mbox{(DK2012 5.10)}\\
+  K^{(0)}_t &= T_tM_{\infty,t}F^{(1)}_t & \mbox{(DK2012 5.12)}\\
+  K^{(1)}_t &= T_tM_{\star,t}F^{(1)}_t + T_tM_{\infty,t}F^{(2)}_t &
+                                                                    \mbox{(DK2012 5.12)}\\
+  L^{(0}_t &= T_t - K^{(0)}_tZ_t & \mbox{(DK2012 5.12)}\\
+  L^{(1}_t &= - K^{(1)}_tZ_t & \mbox{(DK2012 5.12)}\\
+  a^{(0)}_{t|t} &= a^{(0)}_t + M_{\infty,t}F^{(1)}_t\nu^{(0)}_t\\
+  P_{\infty,t|t} &= P_{\infty,t} - P_{\infty,t}Z'_tF^{(1)}_tM_{\infty,t}' \\
+  P_{\star,t|t} &= P_{\star,t} - P_{\star,t}Z'_t
+                  F^{(1)}_tZ_tP_{\infty,t} -
+                  P_{\infty,t}Z'_t(F^{(1)}Z_tP_{\star,t} + F^{(2)}Z_tP_{\infty})\\
+  a^{(0)}_{t+1} &= T_ta^{(0)}_t + K^{(0)}_t\nu^{(0)}_t & \mbox{(DK2012 5.13)}\\
+  P_{\infty,t+ 1} &= T_tP_{\infty,t}L^{(0)'}_t & \mbox{(DK2012 5.14)}\\
+  P_{\star, t+1} &= T_tP_{\infty,t}L^{(1)'}_t + T_tP_{\star,t}L^{(0)'}_t + R_tQ_tR_t' & \mbox{(DK2012 5.14)}
+\end{align*}
+When $F^{-1}_{\infty,t} = \mathbf{0}$
+\begin{align*}
+  K^{(0)}_t &= T_tM_{\star,t}F^{-1}_{\star,t}& \mbox{(DK2012 5.15)}\\
+  L^{(0}_t &= T_t - K^{(0)}_tZ_t & \mbox{(DK2012 5.12)}\\
+  L^{(1}_t &= - K^{(1)}_tZ_t & \mbox{(DK2012 5.12)}\\
+  a^{(0)}_{t|t} &= a^{(0)}_t + M_{\star,t}F^{-1}_{\star,t}\nu^{(0)}_t\\
+  P_{\infty,t|t} &= P_{\infty,t} \\
+  P_{\star,t|t} &= P_{\star,t} - P_{\star,t}Z'_t
+                  F^{-1}_{\star,t}Z_tP_{\star,t} \\
+  a^{(0)}_{t+1} &= T_ta^{(0)}_t + K^{(0)}_t\nu^{(0)}_t & \mbox{(DK2012 
+                                                         p. 129)}\\
+  P_{\infty,t+ 1} &= T_tP_{\infty,t}T'_t & \mbox{(DK2012 5.14)}\\
+  P_{\star, t+1} &= T_tP_{\star,t}L^{(0)'}_t + R_tQ_tR_t' & \mbox{(DK2012 5.17).}
+\end{align*}
+When $F^{-1}_{\infty,t}$ is singular but different from zero, one uses
+a univariate step.
+
+The diffuse filter is used only for few iterations at the beginning of
+the computation of the filter. For some of the arrays we use the same
+one that will be used for the rest of the computation. Our in place
+algorithm is
+\begin{align*}
+  \nu_t &= y_t - c_t - Z_t a_t \\
+  F_{\infty,t} &= Z_tP_{\infty,t}Z'_t \\
+  F_{\star,t} &= Z_tP_{\star,t}Z'_t + H_t \\
+  ZP_\infty &= Z_tP_{\infty,t}\\
+  ZP_\star &= Z_tP_{\star,t} \\
+\end{align*}
+When $F^{-1}_{\infty,t}$ is regular
+\begin{align*}
+  \tilde K_{\infty,t} &= F^{(1)}_t(ZP_{\infty}) \\
+  \tilde K_{\star,t} &=  F^{(1)}_t((ZP_{\star}) + F_{\star,t}K_{\infty,t}) \\
+  a_{t|t} &= a_t + K_{\infty,t}'\nu_t\\
+  P_{\infty,t|t} &= P_{\infty,t} - \tilde K'_{\infty,t}(ZP_{\infty}) \\
+  P_{\star,t|t} &= P_{\star,t} - (ZP_{\star})'\tilde K_{\infty,t}
+                  - (ZP_{\infty})'\tilde K_{\star,t}\\
+  a_{t+1} &= d_t + T_ta_{t|t} \\
+  P_{\infty,t+ 1} &= T_tP_{\infty,t}T'_t\\
+  P_{\star, t+1} &= T_tP_{\star,t|t}T'_t + R_tQ_tR_t'
+\end{align*}
+When $F^{-1}_{\infty,t} = \mathbf{0}$
+\begin{align*}
+  K_{\infty,t}^{(0)} &= T_tM_{\star,t}F^{-1}_{\star,t}& \mbox{(DK2012 5.15)}\\
+  a_{t|t} &= a_t + K^{-1}_{\infty,t}\nu^{(0)}_t\\
+  P_{\infty,t|t} &= P_{\infty,t} \\
+  P_{\star,t|t} &= P_{\star,t} - P_{\star,t}Z'_t
+                  F^{-1}_{\star,t}Z_tP_{\star,t} \\
+  a^{(0)}_{t+1} &= T_ta^{(0)}_t + K^{(0)}_t\nu^{(0)}_t & \mbox{(DK2012 
+                                                         p. 129)}\\
+  P_{\infty,t+ 1} &= T_tP_{\infty,t}T'_t & \mbox{(DK2012 5.14)}\\
+  P_{\star, t+1} &= T_tP_{\star,t}L^{(0)'}_t + R_tQ_tR_t' & \mbox{(DK2012 5.17).}
+\end{align*}
+
+\section{Basic smoother}
+\begin{align*}
+  L_t &= T_t - K_tZ_t & \mbox{(DK2012 p. 87)}\\
+  r_{t-1} &= Z'_tF^{-1}_t\nu_t + L'_tr_t & \mbox{(DK2012 4.38)}\\
+  \hat a_t &= a_t + P_tr_{t-1} & \mbox{(DK2012 4.35)}\\
+  N_{t-1} &= Z'_tF^{-1}_tZ_t + L'_tN_tL_t & \mbox{(DK2012 4.42)}\\
+  V_t &= P_t - P_tN_{t-1}P_t & \mbox{(DK2012 4.44)}\\
+  u_t &= F^{-1}_t\nu_t - K'_tr_t & \mbox{(DK2012 4.59)}\\
+  \hat \epsilon_t &= H_tu_t & \mbox{(DK2012 4.58)}\\
+  D_t &= F^{-1}_t + K'_tN_tK_t & \mbox{(DK2012 4.66)}\\
+  \mbox{Var}(\epsilon_t|Y_n) &= H_t - H_tD_tH_t & \mbox{(DK2012 4.65)}\\
+  \hat \eta_t &= Q_t'R'_tr_t & \mbox{(DK2012 4.63)}\\
+  \mbox{Var}(\eta_t|Y_n) &= Q_t - Q_tR'_tN_tR_tQ_t & \mbox{(DK2012 4.68)}                              
+\end{align*}
+
+In place basic smoother
+\begin{align*}
+  K_t &= T\tilde K'_t \\
+  L_t &= T_t - K_tZ_t \\
+  r_{t-1} &= Z'_t(iF\nu)_t + L'_tr_t \\
+  \hat a_t &= a_t + P_tr_{t-1} \\
+  N_{t-1} &= Z'_t(iFZ)_t + L'_tN_tL_t \\
+  V_t &= P_t - P_tN_{t-1}P_t \\
+  \hat \epsilon_t &= H_t((iF\nu)_t - K'r_t) \\
+  D_t &= F^{-1}_t + K'_tN_tK_t \\
+  (V\epsilon)_t &= H_t - H_tD_tH_t \\
+  \hat \eta_t &= Q_tR'_tr_t \\
+  (V\eta)_t &= Q_t - Q_tR'_tN_tR_tQ_t \\
+\end{align*}
+
+\section{Diffuse smoother}
+\begin{align*}
+  L^{(0)}_t &= T_t - K^{(0)}_tZ_t & \mbox{(DK2012 5.12)}\\
+  L^{(1)}_t &= - K^{(1)}_tZ_t & \mbox{(DK2012 5.12)}\\
+  r^{(0)}_{t-1} &= L^{(0)'}_tr^{(0)}_t & \mbox{(DK2012 5.21)}\\
+  r^{(1)}_{t-1} &= Z'_tF^{(1)}\nu^{(0)}_t + L^{(0)'}_tr^{(1)}_t +
+                  L^{(1)'}_tr^{(0)}_t & \mbox{(DK2012 5.21)}\\
+    \hat a_t &= a^{(0)}_t + P_{\star,t}r^{(0)}_{t-1}  +
+             P_{\infty,t}r^{(1)}_{t-1} & \mbox{(DK2012 5.23)} \\
+  N^{(0)}_{t-1} &= L^{(0)'}_tN^{(0)}L^{(0)}_t & \mbox{(DK2012 5.26)}\\
+  N^{(1)}_{t-1} &= Z'_tF^{(1)}_tZ_t + L^{(0)'}_tN^{(1)}L^{(0)}_t
+                  +L^{(1)'}_tN^{(0)}L^{(0)}_t
+                  & \mbox{(DK2012 5.29)}\\
+  N^{(2)}_{t-1} &= Z'_tF^{(2)}_tZ_t + L^{(0)'}_tN^{(2)}L^{(0)}_t +
+                  L^{(0)'}_tN^{(1)}L^{(1)}_t +
+                  L^{(1)'}_tN^{(1)}L^{(0)}_t \\
+  &\;\;\;\;  L^{(1)'}_tN^{(0)}L^{(1)}_t & \mbox{(DK2012 5.29)}\\
+  V_t &= P_{\star,t} - P_{\star,t}N^{(0)}_{t-1}P_{\star,t} -
+        (P_{\star,t}N^{(1)}_{t-1}P_{\infty,t})' -
+        P_{\infty,t}N^{(1)}_{t-1}P_{\star,t}\\
+  &\;\;\;\;-P_{\infty,t}N^{(2)}_{t-1}P_{\infty,t} & \mbox{(DK2012
+                                                    5.28)}\\
+  \hat\epsilon_t &= -H_tK^{(0)}_tr^{(0)}_t & \mbox{(DK2012 p.135)}\\
+  \hat\eta_t &= Q_tR'_tr^{(0)}_t& \mbox{(DK2012 p.135)}\\
+  \mbox{Var}(\epsilon_t|Y_n) &= H_t - H_tK^{(0)}_tN^{(0)}K^{(0)}_t &
+                                                                     \mbox{(DK2012
+                                                                     p.135)}\\
+  \mbox{Var}(\eta_t|Y_n) &= Q_t - Q_tR'_tN^{(0)}_tR_tQ_t &
+                                                           \mbox{(DK2012
+                                                           p.135)}\\
+\end{align*}
+
+In place diffuse smoother
+\begin{align*}
+  K_{\infty,t} &= T\tilde K'_{\infty,t} \\
+  K_t &= T\tilde K'_t \\
+  L0 &= T_t - K_{\infty,t}Z_t \\
+  L &= - K_tZ_t \\
+  r0 &= L0'r0\_1 \\
+  r1 &= Z'_tF^{(1)}\nu_t + (L0)'r1\_1 +
+                  Lr0\_1 \\
+    ahat_t &= a^{(0)}_t + P_{\star,t}r0  +
+             P_{\infty,t}r1 \\
+  N0 &= (L0)'(N0)(L0) \\
+  N1 &= Z'_tiFZ_t + (L0)'(N1\_1)(L0)
+                  +L(N0)L0
+                  \\
+  N2 &= Z_tF^{-1}_{\infty,t}F_{\star,t}F^{-1}_{\infty,t}Z_t + (L0)'(N2\_1)(L0) +
+                  L^{(0)'}_tN^{(1)}L^{(1)}_t +
+                  L^{(1)'}_tN^{(1)}L^{(0)}_t \\
+  &\;\;\;\;  L^{(1)'}_tN^{(0)}L^{(1)}_t \\
+  V_t &= P_{\star,t} - P_{\star,t}N^{(0)}_{t-1}P_{\star,t} -
+        (P_{\star,t}N^{(1)}_{t-1}P_{\infty,t})' -
+        P_{\infty,t}N^{(1)}_{t-1}P_{\star,t}\\
+  &\;\;\;\;-P_{\infty,t}N^{(2)}_{t-1}P_{\infty,t} \\
+  \hat\epsilon_t &= -H_tK^{(0)}_tr^{(0)}_t \\
+  \hat\eta_t &= Q_tR'_tr^{(0)}_t\\
+  \mbox{Var}(\epsilon_t|Y_n) &= H_t - H_tK^{(0)}_tN^{(0)}K^{(0)}_t\\
+  \mbox{Var}(\eta_t|Y_n) &= Q_t - Q_tR'_tN^{(0)}_tR_tQ_t \\
+\end{align*}
+
+\section{Univariate smoother step}
+Initialization
+\begin{align*}
+  r_{t, p_t} &= r_t \\
+  N_{t,p_t} &= N_t
+\end{align*}
+For $i = p_{t-1},\ldots,0$, if $|F_{t,i}| > 0$,
+\begin{align*}
+  r_{t-1,i-1} &= Z'_{t,i}F^{-1}_{t,i}\nu_{t,i} + L'_{t,i}r_{t,i} & \mbox{(DK2012 6.15)}\\
+  N_{t-1,i-1} &= Z'_{t,i}F^{-1}_{t,i}Z_{t,i} + L'_{t,i}N_{t,i}L_{t,i} & \mbox{(DK2012 6.15)}\\
+  \hat\epsilon_{t,i} & \sigma^2_{t,i}F^{-1}_{t,i}(\nu_{t,i} -
+                       K'_{t,i}r_{t,i} & \mbox{(DK2012 p. 157)}\\
+  \mbox{Var}(\hat\epsilon_{t,i}) &= \sigma^4_{t,i}F^{-2}_{t,i}(F_{t,i}
+                                   + K'_{t,i}N_{t,i}K_{t,i}) & \mbox{(DK2012 p. 157)} 
+\end{align*}
+if $F_{t,i} = 0$
+\begin{align*}
+  r_{t-1,i-1} &= r_{t,i} \\
+  N_{t-1,i-1} &= N_{t,i}
+\end{align*}
+and
+\begin{align*}
+  r_{t-1,p_{t-1}} &= T'_{t-1}r_{t,0} & \mbox{(DK2012 6.15)}\\
+  N_{t-1,p_{t-1}} &= T'_{t-1}N_{t,0}T_{t-1}  & \mbox{(DK2012 6.15)}\\
+  r_{t-1} &= r_{t-1, p_{t-1}}\\
+  N_{t-1} &= N_{t-1, p_{t-1}}
+\end{align*}
+
+\section{Univariate diffuse smoother step}
+Initialization
+\begin{align*}
+  r_{t, p_t} &= r_t \\
+  N_{t,p_t} &= N_t
+\end{align*}
+
+For $i = p_{t-1},\ldots,0$, if $|F_{t,i}| > 0$,
+\begin{align*}
+  r0_{t-1,i-1} &= L'_{\infty,i}r0_{t,i} \\
+  r1_{t-1,i-1} &= Z'_{t,i}F^{-1}_{t,i}\nu_{t,i} +
+                 L'_{\infty,t,i}r0_{t,i} + L'_{0,t,i}r1_{t,i} \\
+  N^{(0)}_{t-1,i-1} &= L'_{\infty,t,i}N^{(0)}_{t,i}L_{\infty,t,i} & \mbox{(DK2012 5.26)}\\
+  N^{(1)}_{t-1,i-1} &= Z'_{t,i}F^{(1)}_{t,i}Z_{t,i} + L'_{\infty,t,i}N^{(0)}L_t
+                  +L_{\infty,t,i}N^{(1)}L_{0,t,i}
+                  & \mbox{(DK2012 5.29)}\\
+  N^{(2)}_{t-1,-1} &= Z'_{t,i}F^{(2)}_{t,i}Z_{t,i} + L^{(0)'}_{0,t,i}N^{(2)}_{t,i}L^{(0)}_{0,t,i} +
+                  L^{(0)'}_{t,i}N^{(1)}_{t,i}L^{(1)}_{t,i} +
+                  L^{(1)'}_{t,i}N^{(1)}_{t,i}L^{(0)}_{t,i} \\
+  &\;\;\;\;  L^{(1)'}_{t,i}N^{(0)}_{t,i}L^{(1)}_{t,i} & \mbox{(DK2012 5.29)}\\
+\end{align*}
+
+if $F_{t,i} = 0$
+\begin{align*}
+  r_{t-1,i-1} &= r_{t,i} \\
+  N_{t-1,i-1} &= N_{t,i}
+\end{align*}
+
+and
+\begin{align*}
+  r_{t-1,p_{t-1}} &= T'_{t-1}r_{t,0} & \mbox{(DK2012 6.15)}\\
+  N_{t-1,p_{t-1}} &= T'_{t-1}N_{t,0}T_{t-1}  & \mbox{(DK2012 6.15)}\\
+  r_{t-1} &= r_{t-1, p_{t-1}}\\
+  N_{t-1} &= N_{t-1, p_{t-1}}\\
+\end{align*}
+
+In place univariate diffuse smoother step
+For $i = p_{t-1},\ldots,0$, if $|F_{t,i}| > 0$,
+\begin{align*}
+  r0_{t-1,i-1} &= L0'_{t,i}r0_{t,i} \\
+  r1_{t-1,i-1} &= Z'_{t,i}F^{-1}_{t,i}\nu_{t,i} +
+                 L0'_{t,i}r0_{t,i} + L1'_{t,i}r1_{t,i} \\
+  N^{(0)}_{t-1,i-1} &= L0'_{t,i}N^{(0)}_{t,i}L0_{t,i}\\
+  N^{(1)}_{t-1,i-1} &= Z'_{t,i}F^{(1)}_{t,i}Z_{t,i} + L'_{\infty,t,i}N^{(0)}L_t
+                  +L_{\infty,t,i}N^{(1)}L_{0,t,i}
+                  & \mbox{(DK2012 5.29)}\\
+  N^{(2)}_{t-1,-1} &= Z'_{t,i}F^{(2)}_{t,i}Z_{t,i} + L^{(0)'}_{0,t,i}N^{(2)}_{t,i}L^{(0)}_{0,t,i} +
+                  L^{(0)'}_{t,i}N^{(1)}_{t,i}L^{(1)}_{t,i} +
+                  L^{(1)'}_{t,i}N^{(1)}_{t,i}L^{(0)}_{t,i} \\
+  &\;\;\;\;  L^{(1)'}_{t,i}N^{(0)}_{t,i}L^{(1)}_{t,i} & \mbox{(DK2012 5.29)}\\
+\end{align*}
+
+
+\end{document}
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:
