@@ -129,11 +129,9 @@ function kalman_smoother!(Y::AbstractArray{U},
     changeP = ndims(P) > 2
     changePtt = ndims(Ptt) > 2
 
-    @show "Entering filter"
     kalman_filter!(Y,c, Z, H, d, T, R, Q, a, att,
                    P, Ptt, start, last, presample, ws,
                    data_pattern)
-    @show "Filter return"
     fill!(ws.r_1,0.0)
     fill!(ws.N_1,0.0)
 
@@ -424,15 +422,12 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{U},
 
         mul!(vKDKinf, vT, transpose(vKinf))
         mul!(vKDK, vT, transpose(vK))
-        @show vcholF
         if isnan(vcholF[1])
             vFinf =view(ws.F, 1:ndata, 1:ndata, t)
             vFstar =view(ws.Fstar, 1:ndata, 1:ndata, t)
             if (length(alphah) > 0 ||
                 length(epsilonh) > 0 ||
                 length(etah) > 0)
-                @show vFinf
-                @show vFstar
                 univariate_diffuse_smoother_step!(vT, vFinf, vFstar,
                                                   vKinf, vK,
                                                   L0, L1, N0, N1, N2,
@@ -445,6 +440,54 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{U},
                                                   vZsmall, ws.kalman_tol,
                                                   ws)
             end
+            if length(epsilonh) > 0
+                vepsilonh = view(epsilonh, :, t)
+                # epsilon_t = -H_t*KDKinf*r0_t         (DK p. 135)
+                get_epsilonh!(vepsilonh, vH, vKDKinf, r0_1, ws.tmp_ny)
+                if length(Vepsilon) > 0
+                    vVepsilon = view(Vepsilon,:,:,t)
+                    vTmp = view(ws.tmp_ny_ns, 1:ndata, :) 
+                    # D_t = KDKinf_t'*N0_t*KDKinf_t    (DK p. 135)
+                    get_D!(ws.D, vKDK,  N0_1, vTmp)
+                    # Vepsilon_t = H - H*D_t*H         (DK p. 135)
+                    vTmp = view(ws.tmp_ny_ny, 1:ndata, 1:ndata)
+                    get_Vepsilon!(vVepsilon, vH, ws.D, ws.tmp_ny_ny)
+                end
+            end
+            if length(etah) > 0
+                vetah = view(etah, :, t)
+                # eta_t = Q*R'*r0_t                    (DK p. 135)
+                get_etah!(vetah, vQ, vR, r0_1, ws.tmp_np)
+                if length(Veta) > 0
+                    vVeta = view(Veta, :, :, t)
+                    # Veta_t = Q - Q*R'*N0_t*R*Q        (DK p. 135)
+                    get_Veta!(vVeta, vQ, vR, N0_1, ws.RQ, ws.tmp_ns_np)
+                end
+            end
+
+            if length(alphah) > 0
+                valphah = view(alphah, :, t)
+                # alphah_t = a_t + Pstar_t*r0_{t-1} + Pinf_t*r1_{t-1}     (DK 5.24)
+                get_alphah!(valphah, va, vPstar, vPinf, r0, r1)
+            end
+
+            if length(Valpha) > 0
+                vValpha = view(Valpha, :, :, t)
+                # Valpha_t = Pstar_t - Pstar_t*N0_{t-1}*Pstar_t
+                #            -(Pinf_t*N1_{t-1}*Pstar_t)'
+                #            -Pinf_t*N1_{t-1}*Pstar_t
+                #            -Pinf_t*N2_{t-1}*Pinf_t                       (DK 5.30)
+                get_Valpha!(vValpha, vPstar, vPinf,
+                            N0, N1, N2, ws.PTmp)
+            end
+            mul!(r0_1, transpose(T), r0)
+            mul!(r1_1, transpose(T), r1)
+            mul!(ws.PTmp, transpose(T), N0)
+            mul!(N0_1, ws.PTmp, T)
+            mul!(ws.PTmp, transpose(T), N1)
+            mul!(N1_1, ws.PTmp, T)
+            mul!(ws.PTmp, transpose(T), N2)
+            mul!(N2_1, ws.PTmp, T)
         else
             # iFv = Finf \ v
             get_iFv!(viFv, vcholF, vv)
@@ -474,63 +517,53 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{U},
                 update_N2!(N2, viFZ, vFstar, L0, N2_1, N1_1,
                            L1, N0_1, vTmp, ws.PTmp)
             end
-        end
-        if length(epsilonh) > 0
-            vepsilonh = view(epsilonh, :, t)
-            # epsilon_t = -H_t*KDKinf*r0_t         (DK p. 135)
-            get_epsilonh!(vepsilonh, vH, vKDKinf, r0_1, ws.tmp_ny)
-            if length(Vepsilon) > 0
-                vVepsilon = view(Vepsilon,:,:,t)
-                vTmp = view(ws.tmp_ny_ns, 1:ndata, :) 
-                # D_t = KDKinf_t'*N0_t*KDKinf_t    (DK p. 135)
-                get_D!(ws.D, vKDK,  N0_1, vTmp)
-                # Vepsilon_t = H - H*D_t*H         (DK p. 135)
-                vTmp = view(ws.tmp_ny_ny, 1:ndata, 1:ndata)
-                get_Vepsilon!(vVepsilon, vH, ws.D, ws.tmp_ny_ny)
+
+            if length(epsilonh) > 0
+                vepsilonh = view(epsilonh, :, t)
+                # epsilon_t = -H_t*KDKinf*r0_t         (DK p. 135)
+                get_epsilonh!(vepsilonh, vH, vKDKinf, r0_1, ws.tmp_ny)
+                if length(Vepsilon) > 0
+                    vVepsilon = view(Vepsilon,:,:,t)
+                    vTmp = view(ws.tmp_ny_ns, 1:ndata, :) 
+                    # D_t = KDKinf_t'*N0_t*KDKinf_t    (DK p. 135)
+                    get_D!(ws.D, vKDK,  N0_1, vTmp)
+                    # Vepsilon_t = H - H*D_t*H         (DK p. 135)
+                    vTmp = view(ws.tmp_ny_ny, 1:ndata, 1:ndata)
+                    get_Vepsilon!(vVepsilon, vH, ws.D, ws.tmp_ny_ny)
+                end
             end
-        end
-        if length(etah) > 0
-            vetah = view(etah, :, t)
-            # eta_t = Q*R'*r0_t                    (DK p. 135)
-            get_etah!(vetah, vQ, vR, r0_1, ws.tmp_np)
-            if length(Veta) > 0
-                vVeta = view(Veta, :, :, t)
-                # Veta_t = Q - Q*R'*N0_t*R*Q        (DK p. 135)
-                get_Veta!(vVeta, vQ, vR, N0_1, ws.RQ, ws.tmp_ns_np)
+            if length(etah) > 0
+                vetah = view(etah, :, t)
+                # eta_t = Q*R'*r0_t                    (DK p. 135)
+                get_etah!(vetah, vQ, vR, r0_1, ws.tmp_np)
+                if length(Veta) > 0
+                    vVeta = view(Veta, :, :, t)
+                    # Veta_t = Q - Q*R'*N0_t*R*Q        (DK p. 135)
+                    get_Veta!(vVeta, vQ, vR, N0_1, ws.RQ, ws.tmp_ns_np)
+                end
             end
-        end
 
-        if length(alphah) > 0
-            valphah = view(alphah, :, t)
-            # alphah_t = a_t + Pstar_t*r0_{t-1} + Pinf_t*r1_{t-1}     (DK 5.24)
-            get_alphah!(valphah, va, vPstar, vPinf, r0, r1)
-            @show t
-            @show va
-            @show vPstar
-            @show vPinf
-            @show r0
-            @show r1
-            @show valphah
-            @show va + vPstar*r0 + vPinf*r1
-            @show vPstar*r0
-            @show vPinf*r1
-        end
+            if length(alphah) > 0
+                valphah = view(alphah, :, t)
+                # alphah_t = a_t + Pstar_t*r0_{t-1} + Pinf_t*r1_{t-1}     (DK 5.24)
+                get_alphah!(valphah, va, vPstar, vPinf, r0, r1)
+            end
 
-        if length(Valpha) > 0
-            vValpha = view(Valpha, :, :, t)
-            # Valpha_t = Pstar_t - Pstar_t*N0_{t-1}*Pstar_t
-            #            -(Pinf_t*N1_{t-1}*Pstar_t)'
-            #            -Pinf_t*N1_{t-1}*Pstar_t
-            #            -Pinf_t*N2_{t-1}*Pinf_t                       (DK 5.30)
-            get_Valpha!(vValpha, vPstar, vPinf,
-                        N0, N1, N2, ws.PTmp)
+            if length(Valpha) > 0
+                vValpha = view(Valpha, :, :, t)
+                # Valpha_t = Pstar_t - Pstar_t*N0_{t-1}*Pstar_t
+                #            -(Pinf_t*N1_{t-1}*Pstar_t)'
+                #            -Pinf_t*N1_{t-1}*Pstar_t
+                #            -Pinf_t*N2_{t-1}*Pinf_t                       (DK 5.30)
+                get_Valpha!(vValpha, vPstar, vPinf,
+                            N0, N1, N2, ws.PTmp)
+            end
+            copy!(r1_1, r1)
+            copy!(r0_1, r0)
+            copy!(N0_1, N0)
+            copy!(N1_1, N1)
+            copy!(N2_1, N2)
         end
-
-        copy!(r1_1, r1)
-        copy!(r0_1, r0)
-        copy!(N0_1, N0)
-        copy!(N1_1, N1)
-        copy!(N2_1, N2)
     end
 end
 

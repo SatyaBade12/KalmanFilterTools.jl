@@ -177,7 +177,7 @@ function kalman_filter!(Y::AbstractArray{U},
                     get_cholF!(ws.cholH, vvH)
                     cholHset = true
                 end
-                ws.lik[t] = ndata*l2pi + univariate_step!(Y, t, c, ws.Zsmall, vvH, d, T, ws.QQ, va, vP, ws.kalman_tol, ws, pattern)
+                ws.lik[t] = ndata*l2pi + univariate_step!(vatt, va1, vPtt, vP1, Y, t, c, ws.Zsmall, vvH, d, T, ws.QQ, va, vP, ws.kalman_tol, ws, pattern)
                 t += 1
                 continue
             end
@@ -384,7 +384,7 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
                     get_cholF!(vcholH, vvH)
                     cholHset = true
                 end
-                ws.lik[t] += ndata*l2pi + univariate_step(Y, t, vc, vZsmall, vvH, vd, vT, ws.QQ, va, vPinf, vPstar, diffuse_kalman_tol, kalman_tol, ws, pattern)
+                ws.lik[t] += ndata*l2pi + univariate_step(vatt, va1, vPinftt, vPinf1, vPstartt, vPstar1, Y, t, vc, vZsmall, vvH, vd, vT, ws.QQ, va, vPinf, vPstar, diffuse_kalman_tol, kalman_tol, ws, pattern)
             end
         else
             ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF))
