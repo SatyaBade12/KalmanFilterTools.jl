@@ -1,4 +1,3 @@
-using Test
 struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     csmall::Vector{T}
     Zsmall::Matrix{T}
@@ -30,7 +29,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     lik::Vector{T}
     KT::Matrix{T}
     D::Matrix{T}
-    ystar::Vector{T}
+    ystar::Vector{Union{T, Missing}}
     Zstar::Matrix{T}
     Hstar::Matrix{T}
     PZi::Vector{T}
@@ -94,7 +93,7 @@ end
 
 KalmanSmootherWs(ny, ns, np, nobs) = KalmanSmootherWs{Float64, Int64}(ny, ns, np, nobs)
 
-function kalman_smoother!(Y::AbstractArray{U},
+function kalman_smoother!(Y::AbstractArray{Union{U, Missing}},
                           c::AbstractArray{U},
                           Z::AbstractArray{W},
                           H::AbstractArray{U},
@@ -141,9 +140,9 @@ function kalman_smoother!(Y::AbstractArray{U},
         pattern = data_pattern[t]
         ndata = length(pattern)
         vc = changeC ? view(c, :, t) : view(c, :)
-        ws.csmall .= view(vc, pattern)
+        #        ws.csmall .= view(vc, pattern)
         vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny, t)
-        vH = changeH ? view(H, :, :, t) : view(H, :, :)
+        vH = changeH ? view(H, pattern, pattern, t) : view(H, pattern, pattern)
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
         va = changeA ? view(a, :, t) : view(a, :)
         vatt = changeAtt ? view(att, :, t) : view(att, :)
@@ -172,16 +171,20 @@ function kalman_smoother!(Y::AbstractArray{U},
             update_N!(ws.N, vZsmall, viFZ, ws.L, ws.N_1, ws.PTmp)
         end
         if length(epsilonh) > 0
-            vepsilonh = view(epsilonh, :, t)
+            vepsilonh = view(epsilonh, pattern, t)
             # epsilon_t = H*(iF_t*v_t - KDK_t'*r_t) (DK 4.69)
-            get_epsilonh!(vepsilonh, vH, viFv, vKDK, ws.r_1, ws.tmp_ny, ws.tmp_ns)
+            vtmp1 = view(ws.tmp_ny, 1:ndata)
+            get_epsilonh!(vepsilonh, vH, viFv, vKDK, ws.r_1, vtmp1, ws.tmp_ns)
             if length(Vepsilon) > 0
-                vVepsilon = view(Vepsilon,:,:,t)
+                vVepsilon = view(Vepsilon, pattern, pattern, t)
                 get_iF!(viF, vcholF)
                 # D_t = inv(F_t) + KDK_t'*N_t*KDK_t (DK 4.69)
-                get_D!(ws.D, viF, vKDK,  ws.N_1, ws.tmp_ny_ns)
+                vD = view(ws.D, 1:ndata, 1:ndata)
+                vtmp1 = view(ws.tmp_ny_ns, 1:ndata, :)
+                get_D!(vD, viF, vKDK,  ws.N_1, vtmp1)
                 # Vepsilon_t = H - H*D_t*H (DK 4.69)
-                get_Vepsilon!(vVepsilon, vH, ws.D, ws.tmp_ny_ny)
+                vtmp1 = view(ws.tmp_ny_ny, 1:ndata, 1:ndata)
+                get_Vepsilon!(vVepsilon, vH, vD, vtmp1)
             end
         end
         if length(etah) > 0
@@ -259,7 +262,7 @@ struct DiffuseKalmanSmootherWs{T, U} <: KalmanWs{T, U}
     D::Matrix{T}
     uKinf::Vector{T}
     uKstar::Vector{T}
-    ystar::Vector{T}
+    ystar::Vector{Union{T, Missing}}
     Kinf_Finf::Vector{T}
     Zstar::Matrix{T}
     Hstar::Matrix{T}
@@ -338,7 +341,7 @@ end
 
 DiffuseKalmanSmootherWs(ny, ns, np, nobs) = DiffuseKalmanSmootherWs{Float64, Int64}(ny, ns, np, nobs)
 
-function diffuse_kalman_smoother_coda!(Y::AbstractArray{U},
+function diffuse_kalman_smoother_coda!(Y::AbstractArray{Union{U, Missing}},
                                        c::AbstractArray{U},
                                        Z::AbstractArray{W},
                                        H::AbstractArray{U},
@@ -399,9 +402,9 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{U},
         pattern = data_pattern[t]
         ndata = length(pattern)
         vc = changeC ? view(c, :, t) : view(c, :)
-        ws.csmall .= view(vc, pattern)
+        #        ws.csmall .= view(vc, pattern)
         vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny, t)
-        vH = changeH ? view(H, :, :, t) : view(H, :, :)
+        vH = changeH ? view(H, pattern, pattern, t) : view(H, pattern, pattern)
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
         va = changeA ? view(a, :, t) : view(a, :)
         vatt = changeAtt ? view(att, :, t) : view(att, :)
@@ -441,17 +444,19 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{U},
                                                   ws)
             end
             if length(epsilonh) > 0
-                vepsilonh = view(epsilonh, :, t)
+                vepsilonh = view(epsilonh, pattern, t)
                 # epsilon_t = -H_t*KDKinf*r0_t         (DK p. 135)
-                get_epsilonh!(vepsilonh, vH, vKDKinf, r0_1, ws.tmp_ny)
+                vtmp1 = view(ws.tmp_ny, 1:ndata)
+                get_epsilonh!(vepsilonh, vH, vKDKinf, r0_1, vtmp1)
                 if length(Vepsilon) > 0
-                    vVepsilon = view(Vepsilon,:,:,t)
+                    vVepsilon = view(Vepsilon, pattern, pattern,t)
                     vTmp = view(ws.tmp_ny_ns, 1:ndata, :) 
                     # D_t = KDKinf_t'*N0_t*KDKinf_t    (DK p. 135)
-                    get_D!(ws.D, vKDK,  N0_1, vTmp)
+                    vD = view(ws.D, 1:ndata, 1:ndata)
+                    get_D!(vD, vKDK,  N0_1, vTmp)
                     # Vepsilon_t = H - H*D_t*H         (DK p. 135)
                     vTmp = view(ws.tmp_ny_ny, 1:ndata, 1:ndata)
-                    get_Vepsilon!(vVepsilon, vH, ws.D, ws.tmp_ny_ny)
+                    get_Vepsilon!(vVepsilon, vH, vD, vTmp)
                 end
             end
             if length(etah) > 0
@@ -567,7 +572,7 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{U},
     end
 end
 
-function diffuse_kalman_smoother!(Y::AbstractArray{U},
+function diffuse_kalman_smoother!(Y::AbstractArray{Union{U, Missing}},
                                   c::AbstractArray{U},
                                   Z::AbstractArray{W},
                                   H::AbstractArray{U},
@@ -615,7 +620,7 @@ function diffuse_kalman_smoother!(Y::AbstractArray{U},
     return -0.5*sum(vlik)
 end
 
-function diffuse_kalman_smoother!(Y::AbstractArray{U},
+function diffuse_kalman_smoother!(Y::AbstractArray{Union{U, Missing}},
                                   c::AbstractArray{U},
                                   Z::AbstractArray{W},
                                   H::AbstractArray{U},

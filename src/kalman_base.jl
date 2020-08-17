@@ -298,13 +298,13 @@ function get_updated_Pstartt!(Pstartt::AbstractMatrix{T}, Pstar::AbstractMatrix{
 end
 
 # v = y - Z*a -- basic
-function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{T}, z::AbstractVecOrMat{T}, a::AbstractVector{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{Union{T, Missing}}, z::AbstractVecOrMat{T}, a::AbstractVector{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
     copyto!(v, 1, y, iy, ny)
     gemv!('N', -1.0, z, a, 1.0, v)
 end
 
 # v = y - Z*a -- basic -- univariate
-function get_v!(Y::AbstractVecOrMat{T}, Z::AbstractVecOrMat{T}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
+function get_v!(Y::AbstractVecOrMat{Union{T, Missing}}, Z::AbstractVecOrMat{T}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
     v = Y[i]
     @inbounds @simd for j = 1:length(a)
         v -= Z[i, j]*a[j]
@@ -313,37 +313,37 @@ function get_v!(Y::AbstractVecOrMat{T}, Z::AbstractVecOrMat{T}, a::AbstractVecto
 end
 
 # v = y - a[z] -- Z selection matrix
-function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{T}, z::AbstractVector{U}, a::AbstractVector{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{Union{T, Missing}}, z::AbstractVector{U}, a::AbstractVector{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
     copyto!(v, 1, y, iy, ny)
     az = view(a,z)
     v .= v .- az
 end
 
 # v = y - a[z] -- Z selection matrix -- univariate
-function get_v!(y::AbstractVecOrMat{T}, z::AbstractVector{U}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
+function get_v!(y::AbstractVecOrMat{Union{T, Missing}}, z::AbstractVector{U}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
     return y[i] - a[z[i]]
 end
 
 # v = y - Z*a -- missing observations
-function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{T}, z::AbstractMatrix{T}, a::AbstractVector{T}, t::U, pattern::Vector{U}) where {T <: AbstractFloat, U <: Integer}
+function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{Union{T, Missing}}, z::AbstractMatrix{T}, a::AbstractVector{T}, t::U, pattern::Vector{U}) where {T <: AbstractFloat, U <: Integer}
     v .= view(y, pattern, t)
     gemv!('N', -1.0, z, a, 1.0, v)
 end
 
 # v = y - a[z] -- Z selection matrix and missing variables
-function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{T}, z::AbstractVector{U}, a::AbstractVector{T}, t::U, pattern::Vector{Int64}) where {T <: AbstractFloat, U <: Integer}
+function get_v!(v::AbstractVector{T}, y::AbstractVecOrMat{Union{T, Missing}}, z::AbstractVector{U}, a::AbstractVector{T}, t::U, pattern::Vector{Int64}) where {T <: AbstractFloat, U <: Integer}
     v .= view(y, pattern, t) .- view(a, z)
 end
 
 # v = y - c - Z*a -- basic
-function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{T}, c::AbstractVector{T}, z::AbstractArray{T}, a::AbstractArray{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{Union{T, Missing}}, c::AbstractVector{T}, z::AbstractArray{T}, a::AbstractArray{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
     copyto!(v, 1, y, iy, ny)
     v .-= c
     gemm!('N', 'N', -1.0, z, a, 1.0, v)
 end
 
 # v = y - c - Z*a -- basic -- univariate
-function get_v!(Y::AbstractVecOrMat{T}, c::AbstractVector{T}, Z::AbstractVecOrMat{T}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
+function get_v!(Y::AbstractVecOrMat{Union{T, Missing}}, c::AbstractVector{T}, Z::AbstractVecOrMat{T}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
     v = Y[i] - c[i]
     @inbounds @simd for j = 1:length(a)
         v -= Z[i, j]*a[j]
@@ -352,25 +352,25 @@ function get_v!(Y::AbstractVecOrMat{T}, c::AbstractVector{T}, Z::AbstractVecOrMa
 end
 
 # v = y - c - a[z] -- Z selection matrix
-function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{T}, c::AbstractArray{T}, z::AbstractVector{U}, a::AbstractArray{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
+function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{Union{T, Missing}}, c::AbstractArray{T}, z::AbstractVector{U}, a::AbstractArray{T}, iy::U, ny::U) where {T <: AbstractFloat, U <: Integer}
     copyto!(v, 1, y, iy, ny)
     az = view(a,z)
     v .-= c .+ az
 end
 
 # v = y - c - a[z] -- Z selection matrix -- univariate
-function get_v!(y::AbstractVecOrMat{T}, c::AbstractVector{T}, z::AbstractVector{U}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
+function get_v!(y::AbstractVecOrMat{Union{T, Missing}}, c::AbstractVector{T}, z::AbstractVector{U}, a::AbstractVector{T}, i::U) where {T <: AbstractFloat, U <: Integer}
     return y[i] - c[i] - a[z[i]]
 end
 
 # v = y - c - Z*a -- missing observations
-function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{T}, c::AbstractArray{T}, z::AbstractArray{T}, a::AbstractArray{T}, t::U, pattern::Vector{U}) where {T <: AbstractFloat, U <: Integer}
+function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{Union{T, Missing}}, c::AbstractArray{T}, z::AbstractArray{T}, a::AbstractArray{T}, t::U, pattern::Vector{U}) where {T <: AbstractFloat, U <: Integer}
     v .= view(y, pattern, t) .-  view(c, pattern)
     gemm!('N', 'N', -1.0, z, a, 1.0, v)
 end
 
 # v = y - c - a[z] -- Z selection matrix and missing variables
-function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{T}, c::AbstractArray{T}, z::AbstractVector{U}, a::AbstractArray{T}, t::U, pattern::Vector{Int64}) where {T <: AbstractFloat, U <: Integer}
+function get_v!(v::AbstractArray{T}, y::AbstractVecOrMat{Union{T, Missing}}, c::AbstractArray{T}, z::AbstractVector{U}, a::AbstractArray{T}, t::U, pattern::Vector{Int64}) where {T <: AbstractFloat, U <: Integer}
     v .= view(y, pattern, t) .- view(c, pattern) .- view(a, z)
 end
 

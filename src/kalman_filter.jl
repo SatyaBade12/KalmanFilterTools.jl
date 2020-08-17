@@ -94,7 +94,7 @@ end
 
 KalmanFilterWs(ny, ns, np, nobs) = KalmanFilterWs{Float64, Int64}(ny, ns, np, nobs)
 
-function kalman_filter!(Y::AbstractArray{U},
+function kalman_filter!(Y::AbstractArray{Union{U, Missing}},
                         c::AbstractArray{U},
                         Z::AbstractArray{W},
                         H::AbstractArray{U},
@@ -140,7 +140,7 @@ function kalman_filter!(Y::AbstractArray{U},
         pattern = data_pattern[t]
         ndata = length(pattern)
         vc = changeC ? view(c, :, t) : view(c, :)
-        ws.csmall .= view(vc, pattern)
+        #        ws.csmall .= view(vc, pattern)
         vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny, t)
         vH = changeH ? view(H, :, :, t) : view(H, :, :)
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
@@ -164,32 +164,29 @@ function kalman_filter!(Y::AbstractArray{U},
         vvH = view(vH, pattern, pattern)
         vZP = view(ws.ZP, 1:ndata, :)
         vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
+        vcholH = view(ws.cholH, 1:ndata, 1:ndata)
     
         # v  = Y[:,t] - c - Z*a
         get_v!(vv, Y, vc, vZsmall, va, t, pattern)
-        if !steady
-            # F  = Z*P*Z' + H
-            get_F!(vF, vZP, vZsmall, vP, vvH)
-            info = get_cholF!(vcholF, vF)
-            if info != 0
-                # F is near singular
-                if !cholHset
-                    get_cholF!(ws.cholH, vvH)
-                    cholHset = true
-                end
-                ws.lik[t] = ndata*l2pi + univariate_step!(vatt, va1, vPtt, vP1, Y, t, c, ws.Zsmall, vvH, d, T, ws.QQ, va, vP, ws.kalman_tol, ws, pattern)
-                t += 1
-                continue
+        # F  = Z*P*Z' + H
+        get_F!(vF, vZP, vZsmall, vP, vvH)
+        info = get_cholF!(vcholF, vF)
+        if info != 0
+            # F is near singular
+            if !cholHset
+                get_cholF!(vcholH, vvH)
+                cholHset = true
             end
+            ws.lik[t] = ndata*l2pi + univariate_step!(vatt, va1, vPtt, vP1, Y, t, c, ws.Zsmall, vvH, d, T, ws.QQ, va, vP, ws.kalman_tol, ws, pattern)
+            t += 1
+            continue
         end
         # iFv = inv(F)*v
         get_iFv!(viFv, vcholF, vv)
         ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF)) + LinearAlgebra.dot(vv, viFv)
         if t <= last
-            if !steady
-                # K = iF*Z*P
-                get_K!(vK, vZP, vcholF)
-            end
+            # K = iF*Z*P
+            get_K!(vK, vZP, vcholF)
             # att = a + K'*v
             get_updated_a!(vatt, va, vK, vv)
             # a = d + T*att
@@ -289,7 +286,7 @@ end
 
 DiffuseKalmanFilterWs(ny, ns, np, nobs) = DiffuseKalmanFilterWs{Float64, Int64}(ny, ns, np, nobs)
 
-function diffuse_kalman_filter_init!(Y::AbstractArray{U},
+function diffuse_kalman_filter_init!(Y::AbstractArray{Union{U, Missing}},
                                      c::AbstractArray{U},
                                      Z::AbstractArray{W},
                                      H::AbstractArray{U},
@@ -311,7 +308,6 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
                                      data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat,
                                                                              V <: Integer,
                                                                              W <: Real}
-    
     changeC = ndims(c) > 1
     changeH = ndims(H) > 2
     changeD = ndims(d) > 1
@@ -337,7 +333,7 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
         pattern = data_pattern[t]
         ndata = length(pattern)
         vc = changeC ? view(c, :, t) : view(c, :)
-        ws.csmall .= view(vc, pattern)
+        #        ws.csmall .= view(vc, pattern)
         vZsmall = get_vZsmall(ws.Zsmall, ws.iZsmall, Z, pattern, ndata, ny, t)
         vH = changeH ? view(H, :, :, t) : view(H, :, :)
         vT = changeT ? view(T, :, :, t) : view(T, :, :)
@@ -419,7 +415,7 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{U},
     return t
 end
 
-function diffuse_kalman_filter!(Y::AbstractArray{U},
+function diffuse_kalman_filter!(Y::AbstractArray{Union{U, Missing}},
                                 c::AbstractArray{U},
                                 Z::AbstractArray{W},
                                 H::AbstractArray{U},
@@ -451,7 +447,7 @@ function diffuse_kalman_filter!(Y::AbstractArray{U},
     return -0.5*sum(vlik)
 end
 
-function diffuse_kalman_filter!(Y::AbstractArray{U},
+function diffuse_kalman_filter!(Y::AbstractArray{Union{U, Missing}},
                                 c::AbstractArray{U},
                                 Z::AbstractArray{W},
                                 H::AbstractArray{U},

@@ -62,7 +62,7 @@ end
 KalmanLikelihoodWs(ny, ns, np, nobs) = KalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
 
 # Z can be either a matrix or a selection vector
-function kalman_likelihood(Y::AbstractArray{U},
+function kalman_likelihood(Y::AbstractArray{Union{U, Missing}},
                            Z::AbstractArray{W},
                            H::AbstractArray{U},
                            T::AbstractArray{U},
@@ -113,7 +113,7 @@ function kalman_likelihood(Y::AbstractArray{U},
     return -0.5*(lik_cst + sum(vlik))
 end
 
-function kalman_likelihood(Y::AbstractArray{U},
+function kalman_likelihood(Y::AbstractArray{Union{U, Missing}},
                            Z::AbstractArray{W},
                            H::AbstractArray{U},
                            T::AbstractArray{U},
@@ -244,7 +244,7 @@ function kalman_likelihood_monitored(Y::Matrix{U},
     return -0.5*(lik_cst + sum(vlik))
 end
 
-function kalman_likelihood_monitored(Y::AbstractArray{U},
+function kalman_likelihood_monitored(Y::AbstractArray{Union{U, Missing}},
                                      Z::AbstractArray{W},
                                      H::AbstractArray{U},
                                      T::AbstractArray{U},

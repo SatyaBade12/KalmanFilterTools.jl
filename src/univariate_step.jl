@@ -313,21 +313,23 @@ function univariate_step(att, a1, Pinftt, Pinf1, Pstartt, Pstar1, Y, t, c, Z, H,
     copy!(Pstartt, Pstar)
     ny = size(Y,1)
     detLTcholH = 1.0
+    ndata = length(pattern)
+    vystar = view(ws.ystar, 1:ndata)
+    vZstar = view(ws.Zstar, 1:ndata, :)
     if !isdiag(H)
-        detLTcholH = transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
+        detLTcholH = transformed_measurement!(ws.ystar, vZstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
     else
-        copy!(ws.ystar, view(Y, :, t))
-        copy!(ws.Zstar, Z)
+        copy!(vystar, view(Y, pattern, t))
+        copy!(vZstar, Z)
     end
     llik = 0.0
     l2pi = log(2*pi)
-    ndata = length(pattern)
     for i=1:ndata
         uKinf = view(ws.Kinf, i, :, t)
         uKstar = view(ws.K, i, :, t)
-        Zi = view(ws.Zstar, pattern[i], :)
-        ws.v[i] = get_v!(ws.ystar, c, ws.Zstar, a, pattern[i])
+        Zi = view(vZstar, i, :)
+        ws.v[i] = get_v!(vystar, c, vZstar, a, i)
         Fstar = get_Fstar!(Zi, Pstartt, H[i], uKstar)
         Finf = get_Finf!(Zi, Pinftt, uKinf)
         # Conduct check of rank
