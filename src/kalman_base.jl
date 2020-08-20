@@ -182,12 +182,14 @@ function get_K!(K::AbstractArray{T}, ZP::AbstractArray{T}, cholF::AbstractArray{
     LAPACK.potrs!('U', cholF, K)
 end
 
+# Kstar  = iFinf*(Z*Pstar - Fstar*Kinf)                           %(5.12) DK(2012);
 function get_Kstar!(Kstar::AbstractArray{T}, Z::AbstractArray{T}, Pstar::AbstractArray{T}, Fstar::AbstractArray{T}, K::AbstractArray{T}, cholF::AbstractArray{T}) where T <: AbstractFloat
     mul!(Kstar, Z, Pstar)
     gemm!('N', 'N', -1.0, Fstar, K, 1.0, Kstar)
     LAPACK.potrs!('U', cholF, Kstar)
 end
 
+# Kstar  = iFinf*(Pstar[z,:] - Fstar*Kinf)                           %(5.12) DK(2012);
 function get_Kstar!(Kstar::AbstractArray{T}, z::AbstractVector{U}, Pstar::AbstractArray{T}, Fstar::AbstractArray{T}, K::AbstractArray{T}, cholF::AbstractArray{T}) where {T <: AbstractFloat, U <: Integer}
     Kstar .= view(Pstar, z, :)
     gemm!('N', 'N', -1.0, Fstar, K, 1.0, Kstar)
