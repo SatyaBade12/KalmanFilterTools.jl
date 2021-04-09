@@ -62,7 +62,7 @@ end
 KalmanLikelihoodWs(ny, ns, np, nobs) = KalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
 
 # Z can be either a matrix or a selection vector
-function kalman_likelihood(Y::AbstractArray{Union{U, Missing}},
+function kalman_likelihood(Y::AbstractArray{X},
                            Z::AbstractArray{W},
                            H::AbstractArray{U},
                            T::AbstractArray{U},
@@ -73,7 +73,7 @@ function kalman_likelihood(Y::AbstractArray{Union{U, Missing}},
                            start::V,
                            last::V,
                            presample::V,
-                           ws::KalmanWs) where {U <: AbstractFloat, W <: Real, V <: Integer}
+                           ws::KalmanWs) where {U <: AbstractFloat, W <: Real, V <: Integer, X <: Union{AbstractFloat, Missing}}
     ny = size(Y,1)
     nobs = last - start + 1
     # QQ = R*Q*R'
@@ -113,7 +113,7 @@ function kalman_likelihood(Y::AbstractArray{Union{U, Missing}},
     return @inbounds -0.5*(lik_cst + sum(vlik))
 end
 
-function kalman_likelihood(Y::AbstractArray{Union{U, Missing}},
+function kalman_likelihood(Y::AbstractArray{X},
                            Z::AbstractArray{W},
                            H::AbstractArray{U},
                            T::AbstractArray{U},
@@ -125,7 +125,7 @@ function kalman_likelihood(Y::AbstractArray{Union{U, Missing}},
                            last::V,
                            presample::V,
                            ws::KalmanWs,
-                           data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer}
+                           data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer, X <: Union{AbstractFloat, Missing}}
     ny = size(Y,1)
     nobs = last - start + 1
     # QQ = R*Q*R'
@@ -178,7 +178,7 @@ function kalman_likelihood(Y::AbstractArray{Union{U, Missing}},
     return @inbounds -0.5*sum(vlik)
 end
 
-function kalman_likelihood_monitored(Y::AbstractArray{Union{U, Missing}},
+function kalman_likelihood_monitored(Y::AbstractArray{X},
                                      Z::AbstractArray{W},
                                      H::AbstractArray{U},
                                      T::AbstractArray{U},
@@ -189,7 +189,7 @@ function kalman_likelihood_monitored(Y::AbstractArray{Union{U, Missing}},
                                      start::V,
                                      last::V,
                                      presample::V,
-                                     ws::KalmanWs) where {U <: AbstractFloat, V <: Integer, W <: Real}
+                                     ws::KalmanWs) where {U <: AbstractFloat, V <: Integer, W <: Real, X <: Union{AbstractFloat, Missing}}
     ny = size(Y,1)
     nobs = last - start + 1
     ns = size(T,1)
@@ -244,7 +244,7 @@ function kalman_likelihood_monitored(Y::AbstractArray{Union{U, Missing}},
     return @inbounds -0.5*(lik_cst + sum(vlik))
 end
 
-function kalman_likelihood_monitored(Y::AbstractArray{Union{U, Missing}},
+function kalman_likelihood_monitored(Y::AbstractArray{X},
                                      Z::AbstractArray{W},
                                      H::AbstractArray{U},
                                      T::AbstractArray{U},
@@ -256,7 +256,7 @@ function kalman_likelihood_monitored(Y::AbstractArray{Union{U, Missing}},
                                      last::V,
                                      presample::V,
                                      ws::KalmanWs,
-                                     data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer}
+                                     data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer, X <: Union{AbstractFloat, Missing}}
     ny = size(Y,1)
     nobs = last - start + 1
     ns = size(T,1)

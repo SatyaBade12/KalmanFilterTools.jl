@@ -29,7 +29,7 @@ struct KalmanSmootherWs{T, U} <: KalmanWs{T, U}
     lik::Vector{T}
     KT::Matrix{T}
     D::Matrix{T}
-    ystar::Vector{Union{T, Missing}}
+    ystar::Vector{Union{AbstractFloat, Missing}}
     Zstar::Matrix{T}
     Hstar::Matrix{T}
     PZi::Vector{T}
@@ -93,7 +93,7 @@ end
 
 KalmanSmootherWs(ny, ns, np, nobs) = KalmanSmootherWs{Float64, Int64}(ny, ns, np, nobs)
 
-function kalman_smoother!(Y::AbstractArray{Union{U, Missing}},
+function kalman_smoother!(Y::AbstractArray{V},
                           c::AbstractArray{U},
                           Z::AbstractArray{W},
                           H::AbstractArray{U},
@@ -115,7 +115,7 @@ function kalman_smoother!(Y::AbstractArray{Union{U, Missing}},
                           last::X,
                           presample::X,
                           ws::KalmanWs,
-                          data_pattern::Vector{Vector{X}}) where {U <: AbstractFloat, W <: Real, X <: Integer}
+                          data_pattern::Vector{Vector{X}}) where {U <: AbstractFloat, V <: Union{AbstractFloat, Missing}, W <: Real, X <: Integer}
 
     changeC = ndims(c) > 1
     changeH = ndims(H) > 2
@@ -262,7 +262,7 @@ struct DiffuseKalmanSmootherWs{T, U} <: KalmanWs{T, U}
     D::Matrix{T}
     uKinf::Vector{T}
     uKstar::Vector{T}
-    ystar::Vector{Union{T, Missing}}
+    ystar::Vector{Union{AbstractFloat, Missing}}
     Kinf_Finf::Vector{T}
     Zstar::Matrix{T}
     Hstar::Matrix{T}
@@ -341,7 +341,7 @@ end
 
 DiffuseKalmanSmootherWs(ny, ns, np, nobs) = DiffuseKalmanSmootherWs{Float64, Int64}(ny, ns, np, nobs)
 
-function diffuse_kalman_smoother_coda!(Y::AbstractArray{Union{U, Missing}},
+function diffuse_kalman_smoother_coda!(Y::AbstractArray{V},
                                        c::AbstractArray{U},
                                        Z::AbstractArray{W},
                                        H::AbstractArray{U},
@@ -365,7 +365,7 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{Union{U, Missing}},
                                        last::X,
                                        presample::X,
                                        ws::DiffuseKalmanSmootherWs,
-                                       data_pattern::Vector{Vector{X}}) where {U <: AbstractFloat, W <: Real, X <: Integer}
+                                       data_pattern::Vector{Vector{X}}) where {U <: AbstractFloat, V <: Union{AbstractFloat, Missing}, W <: Real, X <: Integer}
 
     changeC = ndims(c) > 1
     changeH = ndims(H) > 2
@@ -572,7 +572,7 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{Union{U, Missing}},
     end
 end
 
-function diffuse_kalman_smoother!(Y::AbstractArray{Union{U, Missing}},
+function diffuse_kalman_smoother!(Y::AbstractArray{X},
                                   c::AbstractArray{U},
                                   Z::AbstractArray{W},
                                   H::AbstractArray{U},
@@ -599,7 +599,8 @@ function diffuse_kalman_smoother!(Y::AbstractArray{Union{U, Missing}},
                                   ws::KalmanWs,
                                   data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat,
                                                                           V <: Integer,
-                                                                          W <: Real}
+                                                                          W <: Real,
+                                                                          X <: Union{AbstractFloat, Missing}}
     ny = size(Y,1)
     nobs = last - start + 1
     t = diffuse_kalman_filter_init!(Y, c, Z, H, d, T, R, Q, a, att,
@@ -620,7 +621,7 @@ function diffuse_kalman_smoother!(Y::AbstractArray{Union{U, Missing}},
     return -0.5*sum(vlik)
 end
 
-function diffuse_kalman_smoother!(Y::AbstractArray{Union{U, Missing}},
+function diffuse_kalman_smoother!(Y::AbstractArray{X},
                                   c::AbstractArray{U},
                                   Z::AbstractArray{W},
                                   H::AbstractArray{U},
@@ -646,7 +647,8 @@ function diffuse_kalman_smoother!(Y::AbstractArray{Union{U, Missing}},
                                   tol::U,
                                   ws::KalmanWs) where {U <: AbstractFloat,
                                                        V <: Integer,
-                                                       W <: Real}
+                                                       W <: Real,
+                                                       X <: Union{AbstractFloat, Missing}}
 
     m, n = size(Y)
     full_data_pattern = [collect(1:m) for i = 1:n]

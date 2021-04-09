@@ -94,7 +94,7 @@ end
 
 KalmanFilterWs(ny, ns, np, nobs) = KalmanFilterWs{Float64, Int64}(ny, ns, np, nobs)
 
-function kalman_filter!(Y::AbstractArray{Union{U, Missing}},
+function kalman_filter!(Y::AbstractArray{X},
                         c::AbstractArray{U},
                         Z::AbstractArray{W},
                         H::AbstractArray{U},
@@ -110,7 +110,7 @@ function kalman_filter!(Y::AbstractArray{Union{U, Missing}},
                         last::V,
                         presample::V,
                         ws::KalmanWs,
-                        data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer}
+                        data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer, X <: Union{AbstractFloat, Missing}}
     changeC = ndims(c) > 1
     changeH = ndims(H) > 2
     changeD = ndims(d) > 1
@@ -286,7 +286,7 @@ end
 
 DiffuseKalmanFilterWs(ny, ns, np, nobs) = DiffuseKalmanFilterWs{Float64, Int64}(ny, ns, np, nobs)
 
-function diffuse_kalman_filter_init!(Y::AbstractArray{Union{U, Missing}},
+function diffuse_kalman_filter_init!(Y::AbstractArray{X},
                                      c::AbstractArray{U},
                                      Z::AbstractArray{W},
                                      H::AbstractArray{U},
@@ -307,7 +307,8 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{Union{U, Missing}},
                                      ws::KalmanWs,
                                      data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat,
                                                                              V <: Integer,
-                                                                             W <: Real}
+                                                                             W <: Real,
+                                                                             X <: Union{AbstractFloat, Missing}}
     changeC = ndims(c) > 1
     changeH = ndims(H) > 2
     changeD = ndims(d) > 1
@@ -415,7 +416,7 @@ function diffuse_kalman_filter_init!(Y::AbstractArray{Union{U, Missing}},
     return t
 end
 
-function diffuse_kalman_filter!(Y::AbstractArray{Union{U, Missing}},
+function diffuse_kalman_filter!(Y::AbstractArray{X},
                                 c::AbstractArray{U},
                                 Z::AbstractArray{W},
                                 H::AbstractArray{U},
@@ -436,7 +437,8 @@ function diffuse_kalman_filter!(Y::AbstractArray{Union{U, Missing}},
                                 ws::KalmanWs,
                                 data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat,
                                                                         V <: Integer,
-                                                                        W <: Real}
+                                                                        W <: Real,
+                                                                        X <: Union{AbstractFloat, Missing}}
     ny = size(Y,1)
     nobs = last - start + 1
     get_QQ!(ws.QQ, R, Q, ws.RQ)
@@ -447,7 +449,7 @@ function diffuse_kalman_filter!(Y::AbstractArray{Union{U, Missing}},
     return -0.5*sum(vlik)
 end
 
-function diffuse_kalman_filter!(Y::AbstractArray{Union{U, Missing}},
+function diffuse_kalman_filter!(Y::AbstractArray{X},
                                 c::AbstractArray{U},
                                 Z::AbstractArray{W},
                                 H::AbstractArray{U},
@@ -466,8 +468,9 @@ function diffuse_kalman_filter!(Y::AbstractArray{Union{U, Missing}},
                                 presample::V,
                                 tol::U,
                                 ws::KalmanWs) where {U <: AbstractFloat,
-                                                                        V <: Integer,
-                                                                        W <: Real}
+                                                     V <: Integer,
+                                                     W <: Real,
+                                                     X <: Union{AbstractFloat, Missing}}
 
     m, n = size(Y)
     full_data_pattern = [collect(1:m) for i = 1:n]
