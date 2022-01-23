@@ -8,10 +8,9 @@ Because such operations are very often computed in an iterative manner, all oper
 
 ## Installation
 
-KalmanFilterTools.jl is available on GitLab:
-
 ```
-(v1.4) pkg> add https://git.dynare.org/julia-packages/kalmanfiltertools.jl.git
+julia> using Pkg
+julia> Pkg.add("KalmanFilterTools")
 ```
 
 ## Julia version
