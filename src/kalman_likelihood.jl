@@ -1,54 +1,54 @@
 struct KalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     csmall::Vector{T}
-    Zsmall::Array{T}
+    Zsmall::Matrix{T}
     # necessary for Z selecting vector with missing variables
     iZsmall::Vector{U}
-    RQ::Array{T}
-    QQ::Array{T}
+    RQ::Matrix{T}
+    QQ::Matrix{T}
     v::Vector{T}
-    F::Array{T}
-    cholF::Array{T}
-    cholH::Array{T}
-    LTcholH::Array{T}
+    F::Matrix{T}
+    cholF::Matrix{T}
+    cholH::Matrix{T}
+    LTcholH::Matrix{T}
     iFv::Vector{T}
     a1::Vector{T}
-    K::Array{T}
-    ZP::Array{T}
+    K::Matrix{T}
+    ZP::Matrix{T}
     iFZ::SubArray{T}
-    PTmp::Array{T}
-    oldP::Array{T}
+    PTmp::Matrix{T}
+    oldP::Matrix{T}
     lik::Vector{T}
     cholHset::Bool
     ystar::Vector{T}
-    Zstar::Array{T}
-    Hstar::Array{T}
+    Zstar::Matrix{T}
+    Hstar::Matrix{T}
     tmp_ns::Vector{T}
     PZi::Vector{T}
     kalman_tol::T
 
     function KalmanLikelihoodWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
         csmall = Vector{T}(undef, ny)
-        Zsmall = Array{T}(undef, ny, ns)
+        Zsmall = Matrix{T}(undef, ny, ns)
         iZsmall = Vector{U}(undef, ny)
-        RQ = Array{T}(undef, ns, np)
-        QQ = Array{T}(undef, ns, ns)
-        F = Array{T}(undef, ny, ny)
-        cholF = Array{T}(undef, ny, ny)
-        cholH = Array{T}(undef, ny, ny)
-        LTcholH = Array{T}(undef, ny, ny)
+        RQ = Matrix{T}(undef, ns, np)
+        QQ = Matrix{T}(undef, ns, ns)
+        F = Matrix{T}(undef, ny, ny)
+        cholF = Matrix{T}(undef, ny, ny)
+        cholH = Matrix{T}(undef, ny, ny)
+        LTcholH = Matrix{T}(undef, ny, ny)
         v = Vector{T}(undef, ny)
         iFv = Vector{T}(undef, ny)
         a1 = Vector{T}(undef, ns)
-        K = Array{T}(undef, ny, ns)
-        PTmp = Array{T}(undef, ns, ns)
-        oldP = Array{T}(undef, ns, ns)
-        ZP = Array{T}(undef, ny, ns)
+        K = Matrix{T}(undef, ny, ns)
+        PTmp = Matrix{T}(undef, ns, ns)
+        oldP = Matrix{T}(undef, ns, ns)
+        ZP = Matrix{T}(undef, ny, ns)
         iFZ = view(PTmp,1:ny,:)
         lik = Vector{T}(undef, nobs)
         cholHset = false
         ystar = Vector{T}(undef, ny)
-        Zstar = Array{T}(undef, ny, ns)
-        Hstar = Array{T}(undef, ny, ny)
+        Zstar = Matrix{T}(undef, ny, ns)
+        Hstar = Matrix{T}(undef, ny, ny)
         tmp_ns = Vector{T}(undef, ns)
         PZi = Vector{T}(undef, ns)
         kalman_tol = 1e-12
@@ -62,14 +62,14 @@ end
 KalmanLikelihoodWs(ny, ns, np, nobs) = KalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
 
 # Z can be either a matrix or a selection vector
-function kalman_likelihood(Y::AbstractArray{X},
-                           Z::AbstractArray{W},
-                           H::AbstractArray{U},
-                           T::AbstractArray{U},
-                           R::AbstractArray{U},
-                           Q::AbstractArray{U},
-                           a::AbstractArray{U},
-                           P::AbstractArray{U},
+function kalman_likelihood(Y::AbstractMatrix{X},
+                           Z::AbstractMatrix{W},
+                           H::AbstractMatrix{U},
+                           T::AbstractMatrix{U},
+                           R::AbstractMatrix{U},
+                           Q::AbstractMatrix{U},
+                           a::AbstractVector{U},
+                           P::AbstractMatrix{U},
                            start::V,
                            last::V,
                            presample::V,
@@ -113,14 +113,14 @@ function kalman_likelihood(Y::AbstractArray{X},
     return @inbounds -0.5*(lik_cst + sum(vlik))
 end
 
-function kalman_likelihood(Y::AbstractArray{X},
-                           Z::AbstractArray{W},
-                           H::AbstractArray{U},
-                           T::AbstractArray{U},
-                           R::AbstractArray{U},
-                           Q::AbstractArray{U},
-                           a::AbstractArray{U},
-                           P::AbstractArray{U},
+function kalman_likelihood(Y::AbstractMatrix{X},
+                           Z::AbstractMatrix{W},
+                           H::AbstractMatrix{U},
+                           T::AbstractMatrix{U},
+                           R::AbstractMatrix{U},
+                           Q::AbstractMatrix{U},
+                           a::AbstractVector{U},
+                           P::AbstractMatrix{U},
                            start::V,
                            last::V,
                            presample::V,
@@ -178,14 +178,14 @@ function kalman_likelihood(Y::AbstractArray{X},
     return @inbounds -0.5*sum(vlik)
 end
 
-function kalman_likelihood_monitored(Y::AbstractArray{X},
-                                     Z::AbstractArray{W},
-                                     H::AbstractArray{U},
-                                     T::AbstractArray{U},
-                                     R::AbstractArray{U},
-                                     Q::AbstractArray{U},
+function kalman_likelihood_monitored(Y::AbstractMatrix{X},
+                                     Z::AbstractMatrix{W},
+                                     H::AbstractMatrix{U},
+                                     T::AbstractMatrix{U},
+                                     R::AbstractMatrix{U},
+                                     Q::AbstractMatrix{U},
                                      a::Vector{U},
-                                     P::AbstractArray{U},
+                                     P::AbstractMatrix{U},
                                      start::V,
                                      last::V,
                                      presample::V,
@@ -244,14 +244,14 @@ function kalman_likelihood_monitored(Y::AbstractArray{X},
     return @inbounds -0.5*(lik_cst + sum(vlik))
 end
 
-function kalman_likelihood_monitored(Y::AbstractArray{X},
-                                     Z::AbstractArray{W},
-                                     H::AbstractArray{U},
-                                     T::AbstractArray{U},
-                                     R::AbstractArray{U},
-                                     Q::AbstractArray{U},
-                                     a::AbstractArray{U},
-                                     P::AbstractArray{U},
+function kalman_likelihood_monitored(Y::AbstractMatrix{X},
+                                     Z::AbstractMatrix{W},
+                                     H::AbstractMatrix{U},
+                                     T::AbstractMatrix{U},
+                                     R::AbstractMatrix{U},
+                                     Q::AbstractMatrix{U},
+                                     a::AbstractMatrix{U},
+                                     P::AbstractMatrix{U},
                                      start::V,
                                      last::V,
                                      presample::V,
@@ -324,57 +324,57 @@ end
 
 struct FastKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     csmall::Vector{T}
-    Zsmall::Array{T}
+    Zsmall::Matrix{T}
     iZsmall::Vector{U}
-    QQ::Array{T}
+    QQ::Matrix{T}
     v::Vector{T}
-    F::Array{T}
-    cholF::Array{T}
+    F::Matrix{T}
+    cholF::Matrix{T}
     iFv::Vector{T}
     a1::Vector{T}
-    K::Array{T}
-    RQ::Array{T}
-    ZP::Array{T}
-    M::Array{T}
-    W::Array{T}
-    ZW::Array{T}
-    ZWM::Array{T}
-    iFZWM::Array{T}
-    TW::Array{T}
-    iFZW::Array{T}
-    KtiFZW::Array{T}
+    K::Matrix{T}
+    RQ::Matrix{T}
+    ZP::Matrix{T}
+    M::Matrix{T}
+    W::Matrix{T}
+    ZW::Matrix{T}
+    ZWM::Matrix{T}
+    iFZWM::Matrix{T}
+    TW::Matrix{T}
+    iFZW::Matrix{T}
+    KtiFZW::Matrix{T}
     ystar::Vector{T}
-    Zstar::Array{T}
-    Hstar::Array{T}
+    Zstar::Matrix{T}
+    Hstar::Matrix{T}
     PZi::Vector{T}
     lik::Vector{T}
     kalman_tol::T
 
     function FastKalmanLikelihoodWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
         csmall = Vector{T}(undef, ny)
-        Zsmall = Array{T}(undef, ny, ns)
+        Zsmall = Matrix{T}(undef, ny, ns)
         iZsmall = Vector{U}(undef, ny)
-        QQ = Array{T}(undef, ns, ns)
-        RQ = Array{T}(undef, ns, np)
-        F = Array{T}(undef, ny, ny)
-        cholF = Array{T}(undef, ny, ny)
+        QQ = Matrix{T}(undef, ns, ns)
+        RQ = Matrix{T}(undef, ns, np)
+        F = Matrix{T}(undef, ny, ny)
+        cholF = Matrix{T}(undef, ny, ny)
         v = Vector{T}(undef, ny)
 
         iFv = Vector{T}(undef, ny)
         a1 = Vector{T}(undef, ns)
-        K = Array{T}(undef, ny, ns)
-        M = Array{T}(undef, ny, ny)
-        W = Array{T}(undef, ns, ny)
-        ZP = Array{T}(undef, ny, ns)
-        ZW = Array{T}(undef, ny, ny)
-        ZWM = Array{T}(undef, ny, ny)
-        iFZWM = Array{T}(undef, ny, ny)
-        TW = Array{T}(undef, ns, ny)
-        iFZW = Array{T}(undef, ny, ny)
-        KtiFZW = Array{T}(undef, ns, ny)
+        K = Matrix{T}(undef, ny, ns)
+        M = Matrix{T}(undef, ny, ny)
+        W = Matrix{T}(undef, ns, ny)
+        ZP = Matrix{T}(undef, ny, ns)
+        ZW = Matrix{T}(undef, ny, ny)
+        ZWM = Matrix{T}(undef, ny, ny)
+        iFZWM = Matrix{T}(undef, ny, ny)
+        TW = Matrix{T}(undef, ns, ny)
+        iFZW = Matrix{T}(undef, ny, ny)
+        KtiFZW = Matrix{T}(undef, ns, ny)
         ystar = Vector{T}(undef, ny)
-        Zstar = Array{T}(undef, ny, ns)
-        Hstar = Array{T}(undef, ny, ny)
+        Zstar = Matrix{T}(undef, ny, ns)
+        Hstar = Matrix{T}(undef, ny, ny)
         PZi = Vector{T}(undef, ns)
         lik = Vector{T}(undef, nobs)
         kalman_tol = 1e-12
@@ -388,14 +388,14 @@ FastKalmanLikelihoodWs(ny, ns, np, nobs) = FastKalmanLikelihoodWs{Float64, Int64
 """
 K doesn't represent the same matrix as above
 """
-function fast_kalman_likelihood(Y::Array{U},
-                                Z::AbstractArray{W},
-                                H::Array{U},
-                                T::Array{U},
-                                R::Array{U},
-                                Q::Array{U},
+function fast_kalman_likelihood(Y::Matrix{U},
+                                Z::AbstractMatrix{W},
+                                H::Matrix{U},
+                                T::Matrix{U},
+                                R::Matrix{U},
+                                Q::Matrix{U},
                                 a::Vector{U},
-                                P::Array{U},
+                                P::Matrix{U},
                                 start::V,
                                 last::V,
                                 presample::V,
@@ -441,14 +441,14 @@ function fast_kalman_likelihood(Y::Array{U},
     return -0.5*(lik_cst + sum(vlik))
 end
 
-function fast_kalman_likelihood(Y::Array{U},
-                                Z::AbstractArray{W},
-                                H::Array{U},
-                                T::Array{U},
-                                R::Array{U},
-                                Q::Array{U},
+function fast_kalman_likelihood(Y::Matrix{U},
+                                Z::AbstractMatrix{W},
+                                H::Matrix{U},
+                                T::Matrix{U},
+                                R::Matrix{U},
+                                Q::Matrix{U},
                                 a::Vector{U},
-                                P::Array{U},
+                                P::Matrix{U},
                                 start::V,
                                 last::V,
                                 presample::V,
@@ -512,57 +512,57 @@ end
 
 struct DiffuseKalmanLikelihoodWs{T, U} <: KalmanWs{T, U}
     csmall::Vector{T}
-    Zsmall::Array{T}
+    Zsmall::Matrix{T}
     iZsmall::Vector{U}
-    QQ::Array{T}
-    RQ::Array{T}
+    QQ::Matrix{T}
+    RQ::Matrix{T}
     v::Vector{T}
-    F::Array{T}
-    iF::Array{T}
+    F::Matrix{T}
+    iF::Matrix{T}
     iFv::Vector{T}
     a1::Vector{T}
-    cholF::Array{T}
-    ZP::Array{T}
-    Fstar::Array{T}
-    ZPstar::Array{T}
-    K::Array{T}
-    iFZ::Array{T}
-    Kstar::Array{T}
-    PTmp::Array{T}
+    cholF::Matrix{T}
+    ZP::Matrix{T}
+    Fstar::Matrix{T}
+    ZPstar::Matrix{T}
+    K::Matrix{T}
+    iFZ::Matrix{T}
+    Kstar::Matrix{T}
+    PTmp::Matrix{T}
     uKinf::Vector{T}
     uKstar::Vector{T}
     Kinf_Finf::Vector{T}
     ystar::Vector{T}
-    Zstar::Array{T}
-    Hstar::Array{T}
+    Zstar::Matrix{T}
+    Hstar::Matrix{T}
     PZi::Vector{T}
     lik::Vector{T}
     kalman_tol::T
     function DiffuseKalmanLikelihoodWs{T, U}(ny::U, ns::U, np::U, nobs::U) where {T <: AbstractFloat, U <: Integer}
         csmall = Vector{T}(undef, ny)
-        Zsmall = Array{T}(undef, ny, ns)
+        Zsmall = Matrix{T}(undef, ny, ns)
         iZsmall = Vector{U}(undef, ny)
-        QQ = Array{T}(undef, ns, ns)
-        RQ = Array{T}(undef, ns, np)
+        QQ = Matrix{T}(undef, ns, ns)
+        RQ = Matrix{T}(undef, ns, np)
         v = Vector{T}(undef, ny)
-        F = Array{T}(undef, ny, ny)
-        iF = Array{T}(undef, ny,ny )
+        F = Matrix{T}(undef, ny, ny)
+        iF = Matrix{T}(undef, ny,ny )
         iFv = Vector{T}(undef, ny)
         a1 = Vector{T}(undef, ns)
-        cholF = Array{T}(undef, ny, ny)
-        ZP = Array{T}(undef, ny, ns)
-        Fstar = Array{T}(undef, ny, ny)
-        ZPstar = Array{T}(undef, ny, ns)
-        K = Array{T}(undef, ny, ns)
-        iFZ = Array{T}(undef, ny, ns)
-        Kstar = Array{T}(undef, ny, ns)
-        PTmp = Array{T}(undef, ns, ns)
+        cholF = Matrix{T}(undef, ny, ny)
+        ZP = Matrix{T}(undef, ny, ns)
+        Fstar = Matrix{T}(undef, ny, ny)
+        ZPstar = Matrix{T}(undef, ny, ns)
+        K = Matrix{T}(undef, ny, ns)
+        iFZ = Matrix{T}(undef, ny, ns)
+        Kstar = Matrix{T}(undef, ny, ns)
+        PTmp = Matrix{T}(undef, ns, ns)
         uKinf = Vector{T}(undef, ns)
         uKstar = Vector{T}(undef, ns)
         Kinf_Finf = Vector{T}(undef, ns)
         ystar = Vector{T}(undef, ny)
-        Zstar = Array{T}(undef, ny, ns)
-        Hstar = Array{T}(undef, ny, ny)
+        Zstar = Matrix{T}(undef, ny, ns)
+        Hstar = Matrix{T}(undef, ny, ny)
         PZi = Vector{T}(undef, ns)
         lik = zeros(T, nobs)
         kalman_tol = 1e-12
@@ -574,14 +574,14 @@ end
 
 DiffuseKalmanLikelihoodWs(ny, ns, np, nobs) = DiffuseKalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
 
-function diffuse_kalman_likelihood_init!(Y::Array{U},
-                                         Z::AbstractArray{W},
-                                         H::Array{U},
-                                         T::Array{U},
-                                         QQ::Array{U},
+function diffuse_kalman_likelihood_init!(Y::Matrix{U},
+                                         Z::AbstractMatrix{W},
+                                         H::Matrix{U},
+                                         T::Matrix{U},
+                                         QQ::Matrix{U},
                                          a::Vector{U},
-                                         Pinf::Array{U},
-                                         Pstar::Array{U},
+                                         Pinf::Matrix{U},
+                                         Pstar::Matrix{U},
                                          start::V,
                                          last::V,
                                          tol::U,
@@ -636,14 +636,14 @@ function diffuse_kalman_likelihood_init!(Y::Array{U},
     t
 end
 
-function diffuse_kalman_likelihood_init!(Y::Array{U},
-                                         Z::AbstractArray{W},
-                                         H::Array{U},
-                                         T::Array{U},
-                                         QQ::Array{U},
+function diffuse_kalman_likelihood_init!(Y::Matrix{U},
+                                         Z::AbstractMatrix{W},
+                                         H::Matrix{U},
+                                         T::Matrix{U},
+                                         QQ::Matrix{U},
                                          a::Vector{U},
-                                         Pinf::Array{U},
-                                         Pstar::Array{U},
+                                         Pinf::Matrix{U},
+                                         Pstar::Matrix{U},
                                          start::V,
                                          last::V,
                                          tol::U,
@@ -714,15 +714,15 @@ function diffuse_kalman_likelihood_init!(Y::Array{U},
     t
 end
 
-function diffuse_kalman_likelihood(Y::Array{U},
-                                   Z::AbstractArray{W},
-                                   H::Array{U},
-                                   T::Array{U},
-                                   R::Array{U},
-                                   Q::Array{U},
+function diffuse_kalman_likelihood(Y::Matrix{U},
+                                   Z::AbstractMatrix{W},
+                                   H::Matrix{U},
+                                   T::Matrix{U},
+                                   R::Matrix{U},
+                                   Q::Matrix{U},
                                    a::Vector{U},
-                                   Pinf::Array{U},
-                                   Pstar::Array{U},
+                                   Pinf::Matrix{U},
+                                   Pstar::Matrix{U},
                                    start::V,
                                    last::V,
                                    presample::V,
@@ -740,15 +740,15 @@ function diffuse_kalman_likelihood(Y::Array{U},
     return -0.5*(lik_cst + sum(vlik))
 end
 
-function diffuse_kalman_likelihood(Y::Array{U},
-                                   Z::AbstractArray{W},
-                                   H::Array{U},
-                                   T::Array{U},
-                                   R::Array{U},
-                                   Q::Array{U},
+function diffuse_kalman_likelihood(Y::Matrix{U},
+                                   Z::AbstractMatrix{W},
+                                   H::Matrix{U},
+                                   T::Matrix{U},
+                                   R::Matrix{U},
+                                   Q::Matrix{U},
                                    a::Vector{U},
-                                   Pinf::Array{U},
-                                   Pstar::Array{U},
+                                   Pinf::Matrix{U},
+                                   Pstar::Matrix{U},
                                    start::V,
                                    last::V,
                                    presample::V,
