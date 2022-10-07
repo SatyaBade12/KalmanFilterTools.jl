@@ -607,8 +607,6 @@ function diffuse_kalman_smoother!(Y::AbstractArray{X},
                                     Pinf, Pinftt, Pstar, Pstartt,
                                     start, last, presample, tol, ws,
                                     data_pattern)
-    kalman_filter!(Y, c, Z, H, d, T, R, Q, a, att, Pstar, Pstartt, t +
-                   1, last, presample, ws, data_pattern)
     kalman_smoother!(Y, c, Z, H, d, T, R, Q, a, att, Pstar, Pstartt,
                      alphah, epsilonh, etah, Valphah, Vepsilonh,
                      Vetah, t + 1, last, presample, ws, data_pattern)
