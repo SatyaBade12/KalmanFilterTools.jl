@@ -21,9 +21,8 @@ H = randn(ny, ny)
 H = H'*H
 cholH = copy(H)
 LAPACK.potrf!('L', H)
-detLTcholH = KalmanFilterTools.transformed_measurement!(ystar, Zstar, y, Z, cholH)
+KalmanFilterTools.transformed_measurement!(ystar, Zstar, y, Z, cholH)
 @test y ≈ LowerTriangular(cholH)*ystar
-@test detLTcholH ≈ det(LowerTriangular(cholH))
 
 nobs = 1
 ws = KalmanLikelihoodWs{Float64, Integer}(ny, ns, np, nobs)

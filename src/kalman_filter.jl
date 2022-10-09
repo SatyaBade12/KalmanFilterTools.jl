@@ -94,6 +94,33 @@ end
 
 KalmanFilterWs(ny, ns, np, nobs) = KalmanFilterWs{Float64, Int64}(ny, ns, np, nobs)
 
+function simple_update!(va1, va, vd, vP1, vP, vT, steady, ws)
+    # a = d + T*a
+    update_a!(va1, vd, vT, va)
+    if !steady
+        copy!(ws.oldP, vP)
+        # P = T*P*T + QQ
+        update_P!(vP1, vT, vP, ws.QQ, ws.PTmp)
+        ws.oldP .-= vP1
+        if norm(ws.oldP) < length(va)*eps()
+            steady = true
+        end
+    end
+    return steady
+end
+
+function full_update!(va1, va, vatt, vd, vcholF, vK, vP1, vP, vPtt, vT, vv, vZP, d, steady, ws)
+    # K = iF*Z*P
+    get_K!(vK, vZP, vcholF)
+    # att = a + K'*v
+    get_updated_a!(vatt, va, vK, vv)
+    if !steady
+        # Ptt = P - K'*Z*P
+        get_updated_Ptt!(vPtt, vP, vK, vZP)
+    end
+    steady = simple_update!(va1, vatt, vd, vP1, vPtt, vT, steady, ws)
+end
+
 function kalman_filter!(Y::AbstractArray{X},
                         c::AbstractArray{U},
                         Z::AbstractArray{W},
@@ -110,7 +137,7 @@ function kalman_filter!(Y::AbstractArray{X},
                         last::V,
                         presample::V,
                         ws::KalmanWs,
-                        data_pattern::Vector{Vector{V}}) where {U <: AbstractFloat, W <: Real, V <: Integer, X <: Union{AbstractFloat, Missing}}
+                        data_pattern::Vector{Vector{V}}) where {U <: Real, W <: Real, V <: Integer, X <: Union{Real, Missing}}
     changeC = ndims(c) > 1
     changeH = ndims(H) > 2
     changeD = ndims(d) > 1
@@ -122,7 +149,6 @@ function kalman_filter!(Y::AbstractArray{X},
     changeK = ndims(ws.K) > 2
     changeF = ndims(ws.F) > 2
     changeiFv = ndims(ws.iFv) > 1
-    
     ny = size(Y, 1)
     nobs = last - start + 1
     ns = size(T,1)
@@ -166,11 +192,25 @@ function kalman_filter!(Y::AbstractArray{X},
         vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
         vcholH = view(ws.cholH, 1:ndata, 1:ndata)
     
+        if ndata == 0
+            # no observation this period
+            if t <= last
+                changeA && copy!(vatt, va)
+                changeP && copy!(vPtt, vP)
+                steady = simple_update!(va1, va, vd, vP1, vP, vT, steady, ws)
+            end
+            t = t + 1
+            continue
+        end
+        # some observations this period
         # v  = Y[:,t] - c - Z*a
         get_v!(vv, Y, vc, vZsmall, va, t, pattern)
         # F  = Z*P*Z' + H
         get_F!(vF, vZP, vZsmall, vP, vvH)
         info = get_cholF!(vcholF, vF)
+        if t <= start + 6
+            @show t, det(vF), info
+        end
         if info != 0
             # F is near singular
             if !cholHset
@@ -178,35 +218,36 @@ function kalman_filter!(Y::AbstractArray{X},
                 cholHset = true
             end
             ws.lik[t] = ndata*l2pi + univariate_step!(vatt, va1, vPtt, vP1, Y, t, c, ws.Zsmall, vvH, d, T, ws.QQ, va, vP, ws.kalman_tol, ws, pattern)
+            t <= start + 5 && @show ws.lik[t] - ndata*l2pi, va1
             t += 1
             continue
         end
         # iFv = inv(F)*v
         get_iFv!(viFv, vcholF, vv)
         ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF)) + LinearAlgebra.dot(vv, viFv)
-        if t <= last
-            # K = iF*Z*P
-            get_K!(vK, vZP, vcholF)
-            # att = a + K'*v
-            get_updated_a!(vatt, va, vK, vv)
-            # a = d + T*att
-            update_a!(va1, vd, vT, vatt)
-            if !steady
-                copy!(ws.oldP, vP)
-                # Ptt = P - K'*Z*P
-                get_updated_Ptt!(vPtt, vP, vK, vZP)
-                # P = T*Ptt*T + QQ
-                update_P!(vP1, vT, vPtt, ws.QQ, ws.PTmp)
-                ws.oldP .-= vP1
-                if norm(ws.oldP) < 0#ns*eps()
-                    steady = true
-                end
-            elseif t > 1
-                if changeP
-                    copy!(vP1, vP)
-                    vPtt1 = view(Ptt, :, : , t-1)
-                    copy!(vPtt, vPtt1)
-                end
+        # don't update in last period
+        if t < last
+            full_update!(va1, va, vatt, vd, vcholF, vK, vP1, vP, vPtt, vT, vv, vZP, d, steady, ws)            
+            if t == 5
+                @show vatt
+                @show va1
+                @show vPtt[1,:]
+                @show vP1[1, :]
+                vattZ = similar(vatt)
+                va1Z = similar(va1)
+                vPttZ = similar(vPtt)
+                vP1Z = similar(vP1)
+                univariate_step!(vattZ, va1Z, vPttZ, vP1Z, Y, t, c, ws.Zsmall, vvH, d, T, ws.QQ, va, vP, ws.kalman_tol, ws, pattern)
+                @show vattZ
+                @show va1Z
+                @show vPttZ[1,:]
+                @show vP1Z[1, :]
+            end
+            if changeP && steady && t > 1
+                # steady state: covariances are just copied over 
+                copy!(vP1, vP)
+                vPtt_1 = view(Ptt, :, : , t-1)
+                copy!(vPtt, vPtt_1)
             end
         end
         t += 1
@@ -442,7 +483,6 @@ function diffuse_kalman_filter!(Y::AbstractArray{X},
     ny = size(Y,1)
     nobs = last - start + 1
     get_QQ!(ws.QQ, R, Q, ws.RQ)
-    lik_cst = (nobs - presample)*ny*log(2*pi)
     t = diffuse_kalman_filter_init!(Y, c, Z, H, d, T, R, Q, a, att, Pinf, Pinftt, Pstar, Pstartt, start, last, presample, tol, ws, data_pattern)
     kalman_filter!(Y, c, Z, H, d, T, R, Q, a, att, Pstar, Pstartt, t + 1, last, presample, ws, data_pattern)
     vlik = view(ws.lik, start + presample:last)

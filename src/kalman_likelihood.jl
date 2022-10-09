@@ -88,6 +88,9 @@ function kalman_likelihood(Y::AbstractMatrix{X},
         # F  = Z*P*Z' + H
         get_F!(ws.F, ws.ZP, Z, P, H)
         info = get_cholF!(ws.cholF, ws.F)
+        if t <= start + 6
+            @show t, det(ws.F), info
+        end
         if info != 0
             # F is near singular
             if !cholHset
@@ -95,6 +98,7 @@ function kalman_likelihood(Y::AbstractMatrix{X},
                 cholHset = true
             end
             ws.lik[t] = univariate_step!(Y, t, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
+            t <= start + 5 && @show ws.lik[t]
         else
             # iFv = inv(F)*v
             get_iFv!(ws.iFv, ws.cholF, ws.v)
@@ -199,6 +203,7 @@ function kalman_likelihood_monitored(Y::AbstractMatrix{X},
     iy = (start - 1)*ny + 1
     steady = false
     @inbounds copy!(ws.oldP, P)
+    cholHset = false
     @inbounds while t <= last
         # v  = Y[:,t] - Z*a
         get_v!(ws.v, Y, Z, a, iy, ny)
@@ -231,7 +236,7 @@ function kalman_likelihood_monitored(Y::AbstractMatrix{X},
             # P = T*(P - K'*Z*P)*T'+ QQ
             update_P!(P, T, ws.QQ, ws.K, ws.ZP, ws.PTmp)
             ws.oldP .-= P
-            if norm(ws.oldP) < ns*eps()*5e10
+            if norm(ws.oldP) < 0*ns*eps()
                 steady = true
             else
                 copy!(ws.oldP, P)
@@ -250,7 +255,7 @@ function kalman_likelihood_monitored(Y::AbstractMatrix{X},
                                      T::AbstractMatrix{U},
                                      R::AbstractMatrix{U},
                                      Q::AbstractMatrix{U},
-                                     a::AbstractMatrix{U},
+                                     a::AbstractVector{U},
                                      P::AbstractMatrix{U},
                                      start::V,
                                      last::V,
@@ -292,7 +297,7 @@ function kalman_likelihood_monitored(Y::AbstractMatrix{X},
                     get_cholF!(ws.cholH, H)
                     cholHset = true
                 end
-                ws.lik[t] = ndatat*l2pi + univariate_step!(Y, t, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws, pattern)
+                ws.lik[t] = ndata*l2pi + univariate_step!(Y, t, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws, pattern)
                 t += 1
                 continue
             end
@@ -310,7 +315,7 @@ function kalman_likelihood_monitored(Y::AbstractMatrix{X},
             # P = T*(P - K'*Z*P)*T'+ QQ
             update_P!(P, T, ws.QQ, vK, vZP, ws.PTmp)
             ws.oldP .-= P
-            if norm(ws.oldP) < ns*eps()*5e5
+            if norm(ws.oldP) < 0*ns*eps()
                 steady = true
             else
                 copy!(ws.oldP, P)
@@ -412,7 +417,6 @@ function fast_kalman_likelihood(Y::Matrix{U},
     mul!(ws.W, T, transpose(ws.K))
     # M = -iF
     get_M!(ws.M, ws.cholF, ws.ZW)
-    LIK = 0
     t = start
     iy = (start - 1)*ny + 1
     @inbounds while t <= last
@@ -467,7 +471,6 @@ function fast_kalman_likelihood(Y::Matrix{U},
     mul!(ws.W, T, transpose(ws.K))
     # M = -iF
     get_M!(ws.M, ws.cholF, ws.ZW)
-    LIK = 0
     t = start
     iy = (start - 1)*ny + 1
     @inbounds while t <= last

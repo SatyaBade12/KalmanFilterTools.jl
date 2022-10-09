@@ -17,27 +17,67 @@ function transformed_measurement!(ystar, Zstar, y, Z, cholH)
     ldiv!(LTcholH, ystar)
     copy!(Zstar, Z)
     ldiv!(LTcholH, Zstar)
-    detLTcholH = 1
-    for i = 1:size(LTcholH,1)
-        detLTcholH *= LTcholH[i,i]
+end
+
+function logproddiag(A)
+    @assert isdiag(A)
+    y = 0
+    for i in 1:size(A, 1)
+        y += log(A[i, i])
     end
-    return detLTcholH
+    return y
 end
 
 function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws)
     ny = size(Y,1)
-    detLTcholH = 1.0
     if !isdiag(H)
-        detLTcholH = transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
+        transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
+	logdetcholH = 0.0
     else
         copy!(ws.ystar, view(Y, :, t))
         copy!(ws.Zstar, Z)
+        logdetcholH = logproddiag(H)
     end
     llik = 0.0
     for i=1:ny
         Zi = view(ws.Zstar, i, :)
         v = get_v!(ws.ystar, ws.Zstar, a, i)
+        F = get_F(Zi, P, H[i,i], ws.PZi)
+        if abs(F) > kalman_tol
+            a .+= (v/F) .* ws.PZi
+            # P = P - PZi*PZi'/F
+            ger!(-1.0/F, ws.PZi, ws.PZi, P)
+            llik += log(F) + v*v/F
+            if t <= 6
+                @show v, F, ws.PZi[i], a[i], P[i,i]
+            end
+        end
+    end
+    mul!(ws.a1, T, a)
+    a .= ws.a1
+    mul!(ws.PTmp, T, P)
+    copy!(P, RQR)
+    mul!(P, ws.PTmp, T', 1.0, 1.0)
+    return llik + 2*logdetcholH
+end
+
+function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws, pattern)
+    ny = size(Y,1)
+    if !isdiag(H)
+        transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
+        H = I(ny)
+	logdetcholH = 0.0
+    else
+        copy!(ws.ystar, view(Y, :, t))
+        copy!(ws.Zstar, Z)
+        logdetcholH = logproddiag(H)
+    end
+    llik = 0.0
+    ndata = length(pattern)
+    for i in 1:ndata
+        Zi = view(ws.Zstar, pattern[i], :)
+        v = get_v!(ws.ystar, ws.Zstar, a, pattern[i])
         F = get_F(Zi, P, H[i,i], ws.PZi)
         if abs(F) > kalman_tol
             a .+= (v/F) .* ws.PZi
@@ -51,50 +91,19 @@ function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws)
     mul!(ws.PTmp, T, P)
     copy!(P, RQR)
     mul!(P, ws.PTmp, T', 1.0, 1.0)
-    return llik + 2*log(detLTcholH)
-end
-
-function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws, pattern)
-    ny = size(Y,1)
-    detLTcholH = 1.0
-    if !isdiag(H)
-        detLTcholH = transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
-        H = I(ny)
-    else
-        copy!(ws.ystar, view(Y, :, t))
-        copy!(ws.Zstar, Z)
-    end
-    l2pi = log(2*pi)
-    llik = 0.0
-    ndata = size(pattern)
-    for i=1:ndata
-        Zi = view(ws.Zstar, pattern[i], :)
-        v = get_v!(ws.ystar, ws.Zstar, a, pattern[i])
-        F = get_F(Zi, P, H[i,i], ws.PZi)
-        if abs(F) > kalman_tol
-            a .+= (v/F) .* ws.PZi
-            # P = P - PZi*PZi'/F
-            ger!(-1.0/F, ws.PZi, ws.PZi, P)
-            llik += ndata*l2pi + log(F) + v*v/F
-        end
-    end
-    mul!(ws.a1, T, a)
-    a .= ws.a1
-    mul!(ws.PTmp, T, P)
-    copy!(P, RQR)
-    mul!(P, ws.PTmp, T', 1.0, 1.0)
-    return llik + 2*log(detLTcholH)
+    return llik + 2*logdetcholH
 end
 
 function univariate_step(Y, t, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws)
     ny = size(Y,1)
-    detLTcholH = 1.0
     if !isdiag(H)
-        detLTcholH = transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
+        transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
+	logdetcholH = 0.0
     else
         copy!(ws.ystar, view(Y, :, t))
         copy!(ws.Zstar, Z)
+        logdetcholH = logproddiag(H)
     end
     llik = 0.0
     for i=1:size(Y,1)
@@ -132,22 +141,22 @@ function univariate_step(Y, t, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, 
     mul!(ws.PTmp, T, P)
     copy!(P, RQR)
     mul!(P, ws.PTmp, T', 1.0, 1.0)
-    return llik + 2*log(detLTcholH)
+    return llik + 2*logdetcholH
 end
 
 function univariate_step(Y, t, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws, pattern)
     ny = size(Y,1)
-    detLTcholH = 1.0
     if !isdiag(H)
-        detLTcholH = transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
+        transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
+	logdetcholH = 0.0
     else
         copy!(ws.ystar, view(Y, :, t))
         copy!(ws.Zstar, Z)
+        logdetcholH = logproddiag(H)
     end
     llik = 0.0
-    l2pi = log(2*pi)
-    ndata = size(pattern)
+    ndata = length(pattern)
     for i=1:ndata
         Zi = view(ws.Zstar, pattern[i], :)
         v = get_v(ws.ystar, ws.Zstar, a, pattern[i])
@@ -168,7 +177,7 @@ function univariate_step(Y, t, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, 
             ger!( -1.0, ws.Kinf_Finf, ws.uKstar, Pstar)
             # Pinf      = Pinf - Kinf*Kinf_Finf'
             ger!(-1.0, ws.uKinf, ws.Kinf_Finf, Pinf)
-            llik += ndata*l2pi + log(Finf)
+            llik += log(Finf)
         elseif Fstar > kalman_tol
             llik += ndata*l2pi, log(Fstar) + v*v/Fstar
             a .+= ws.uKstar.*(v/Fstar)
@@ -183,18 +192,19 @@ function univariate_step(Y, t, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, 
     mul!(ws.PTmp, T, P)
     copy!(P, RQR)
     mul!(P, ws.PTmp, T', 1.0, 1.0)
-    return llik + 2*log(detLTcholH)
+    return llik + 2*logdetcholH
 end
 
 function univariate_step!(Y, c, t, Z, H, d, T, RQR, a, P, kalman_tol, ws)
     ny = size(Y,1)
-    detLTcholH = 1.0
     if !isdiag(H)
-        detLTcholH = transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
+        transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
+	logdetcholH = 0.0
     else
         copy!(ws.ystar, view(Y, :, t))
         copy!(ws.Zstar, Z)
+        logdetcholH = logproddiag(H)
     end
     llik = 0.0
     for i=1:ny
@@ -214,20 +224,21 @@ function univariate_step!(Y, c, t, Z, H, d, T, RQR, a, P, kalman_tol, ws)
     mul!(ws.PTmp, T, P)
     copy!(P, RQR)
     mul!(P, ws.PTmp, T', 1.0, 1.0)
-    return llik + 2*log(detLTcholH)
+    return llik + 2*logdetcholH
 end
+
 
 function univariate_step!(att, a1, Ptt, P1, Y, t, c, Z, H, d, T, RQR, a, P, kalman_tol, ws, pattern)
     ny = size(Y,1)
-    detLTcholH = 1.0
     if !isdiag(H)
-        detLTcholH = transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
+        transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
+	logdetcholH = 0.0
     else
         copy!(ws.ystar, view(Y, :, t))
         copy!(ws.Zstar, Z)
+        logdetcholH = logproddiag(H)
     end
-    l2pi = log(2*pi)
     llik = 0.0
     ndata = length(pattern)
     copy!(att, a)
@@ -240,7 +251,10 @@ function univariate_step!(att, a1, Ptt, P1, Y, t, c, Z, H, d, T, RQR, a, P, kalm
             att .+= (v/F) .* ws.PZi
             # P = P - PZi*PZi'/F
             ger!(-1.0/F, ws.PZi, ws.PZi, Ptt)
-            llik += ndata*l2pi + log(F) + v*v/F
+            llik += log(F) + v*v/F
+            if t <=  6
+                @show v, F, ws.PZi[i], a[i], P[i, i]
+            end
         end
     end
     copy!(a1, d)
@@ -248,18 +262,19 @@ function univariate_step!(att, a1, Ptt, P1, Y, t, c, Z, H, d, T, RQR, a, P, kalm
     mul!(ws.PTmp, T, Ptt)
     copy!(P1, RQR)
     mul!(P1, ws.PTmp, T', 1.0, 1.0)
-    return llik + 2*log(detLTcholH)
+    return llik + 2*logproddiag(H)
 end
 
 function univariate_step(Y, t, c, Z, H, d, T, RQR, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws)
     ny = size(Y,1)
-    detLTcholH = 1.0
     if !isdiag(H)
-        detLTcholH = transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
+        transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
+	logdetcholH = 0.0
     else
         copy!(ws.ystar, view(Y, :, t))
         copy!(ws.Zstar, Z)
+        logdetcholH = logproddiag(H)
     end
     llik = 0.0
     for i=1:size(Y,1)
@@ -304,7 +319,7 @@ function univariate_step(Y, t, c, Z, H, d, T, RQR, a, Pinf, Pstar, diffuse_kalma
     mul!(ws.PTmp, T, Pstar)
     copy!(Pstar, RQR)
     mul!(Pstar, ws.PTmp, T', 1.0, 1.0)
-    return llik + 2*log(detLTcholH)
+    return llik + 2*logdetcholH
 end
 
 function univariate_step(att, a1, Pinftt, Pinf1, Pstartt, Pstar1, Y, t, c, Z, H, d, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws, pattern)
@@ -312,19 +327,19 @@ function univariate_step(att, a1, Pinftt, Pinf1, Pstartt, Pstar1, Y, t, c, Z, H,
     copy!(Pinftt, Pinf)
     copy!(Pstartt, Pstar)
     ny = size(Y,1)
-    detLTcholH = 1.0
     ndata = length(pattern)
     vystar = view(ws.ystar, 1:ndata)
     vZstar = view(ws.Zstar, 1:ndata, :)
     if !isdiag(H)
-        detLTcholH = transformed_measurement!(ws.ystar, vZstar, view(Y, :, t), Z, ws.cholH)
+        transformed_measurement!(ws.ystar, vZstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
+	logdetcholH = 0.0
     else
         copy!(vystar, view(Y, pattern, t))
         copy!(vZstar, Z)
+        logdetcholH = logproddiag(H)
     end
     llik = 0.0
-    l2pi = log(2*pi)
     for i=1:ndata
         uKinf = view(ws.Kinf, i, :, t)
         uKstar = view(ws.K, i, :, t)
@@ -347,7 +362,7 @@ function univariate_step(att, a1, Pinftt, Pinf1, Pstartt, Pstar1, Y, t, c, Z, H,
             ger!( -1.0, ws.Kinf_Finf, uKstar, Pstartt)
             # Pinf      = Pinf - Kinf*Kinf_Finf'
             ger!(-1.0, uKinf, ws.Kinf_Finf, Pinftt)
-            llik += ndata*l2pi + log(Finf)
+            llik += log(Finf)
         elseif Fstar > kalman_tol
             llik += log(Fstar) + ws.v[i]*ws.v[i]/Fstar
             att .+= uKstar.*(ws.v[i]/Fstar)
@@ -366,7 +381,7 @@ function univariate_step(att, a1, Pinftt, Pinf1, Pstartt, Pstar1, Y, t, c, Z, H,
     mul!(ws.PTmp, T, Pstartt)
     copy!(Pstar1, QQ)
     mul!(Pstar1, ws.PTmp, transpose(T), 1.0, 1.0)
-    return llik + 2*log(detLTcholH)
+    return llik + 2*logdetcholH
 end
 
 function univariate_diffuse_smoother_step!(T::AbstractMatrix{W},

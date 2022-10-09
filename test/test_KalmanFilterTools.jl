@@ -12,10 +12,16 @@ path = dirname(@__FILE__)
 file = h5open("$path/reference/kalman_filter_args.h5", "r")
 y = read(file, "data")
 T, R, C    = read(file, "TTT"), read(file, "RRR"), read(file, "CCC")
-Q, Z, D, H = read(file, "QQ"), read(file, "ZZ"), read(file, "DD"), read(file, "EE")
+Q, Z, D, H_0 = read(file, "QQ"), read(file, "ZZ"), read(file, "DD"), read(file, "EE")
 s_0, P_0   = read(file, "z0"), read(file, "P0")
 close(file)
 
+function t_init!(H, P, s, H_0, P_0, s_0)
+    copy!(H, H_0)
+    copyto!(P, 1, P_0, 1, ns*ns)
+    copyto!(s, 1, s_0, 1, ns)
+end
+    
 ny, ns = size(Z)
 nobs = size(y, 2)
 np = size(R, 2)
@@ -27,40 +33,84 @@ y .-= D
 
 full_data_pattern = [collect(1:ny) for o = 1:nobs]
 
+H = zeros(ny, ny)
+P = zeros(ns, ns)
+s = zeros(ns)
 # Simple Kalman Filter
-P = copy(P_0)
-s = copy(s_0)
 @testset "Basic Kalman Filter" begin
     ws1 = KalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
 
-    copy!(P, P_0)
+    t_init!(H, P, s, H_0, P_0, s_0)
     llk_1 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
 
     h5open("$path/reference/kalman_filter_out.h5", "r") do h5
         @test read(h5, "log_likelihood") ≈ llk_1
     end
     
-    copy!(s, s_0)
-    copy!(P, P_0)
+    t_init!(H, P, s, H_0, P_0, s_0)
     llk_2 = kalman_likelihood_monitored(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
     @test llk_2 ≈ llk_1
 
-    copy!(s, s_0)
-    copy!(P, P_0)
+    t_init!(H, P, s, H_0, P_0, s_0)
     llk_2 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
     @test llk_2 ≈ llk_1
 
-    copy!(s, s_0)
-    copy!(P, P_0)
+    t_init!(H, P, s, H_0, P_0, s_0)
     llk_2 = kalman_likelihood_monitored(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
     @test llk_2 ≈ llk_1
 
 end
 
-H_0 = copy(H)
-# Singular F matrix
+@testset "Singular F matrix" begin
+    H_1 = zeros(ny, ny)
+    
+    ws1 = KalmanLikelihoodWs(ny, ns, np, nobs)
+    ws2 = KalmanFilterWs(ny, ns, np, nobs)
+    P = zeros(ns, ns, nobs + 1)
+    s = zeros(ns, nobs + 1)
+    s[:, 1] .= s_0
+    Ptt = zeros(ns, ns, nobs)
+    stt = zeros(ns, nobs)
+
+    llk_1 = kalman_filter!(y, zeros(ny), Z, H_1, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws2, full_data_pattern)
+    @test P[:, :, 2] ≈ R*Q*R'
+
+    P = zeros(ns, ns)
+    P_0 = zeros(ns, ns)
+    s = zeros(ns)
+    t_init!(H, P, s, H_1, P_0, s_0)
+
+    llk_2 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
+    @test llk_2  ≈ llk_1
+
+    t_init!(H, P, s, H_1, P_0, s_0)
+    
+    llk_3 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    @test llk_3  ≈ llk_1
+
+    t_init!(H, P, s, H_1, P_0, s_0)
+
+    
+    llk_4 = kalman_likelihood_monitored(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
+    @test llk_4  ≈ llk_1
+
+    t_init!(H, P, s, H_1, P_0, s_0)
+
+    
+    llk_5 = kalman_likelihood_monitored(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    @test llk_5  ≈ llk_1
+
+end
+
 @testset "Singular F matrix diagonal H" begin
-    H = zeros(ny, ny) + I(ny)
+    H_1 = Matrix{Float64}(I(ny))
+    Z_1 = copy(Z)
+    Z_1[3, :] = Z[1, :] + Z[2, :]
+    Z_1[1, 1] -= sqrt(P_0[1,1])
+    Z_1[2, 2] -= sqrt(P_0[2,2])
+    Z_1[3, 3] -= sqrt(P_0[3,3])
+    @show det(Z_1*P_0*Z_1' + H) 
+
     
     ws1 = KalmanLikelihoodWs(ny, ns, np, nobs)
     ws2 = KalmanFilterWs(ny, ns, np, nobs)
@@ -70,38 +120,42 @@ H_0 = copy(H)
     Ptt = zeros(ns, ns, nobs)
     stt = zeros(ns, nobs)
     
-    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws2, full_data_pattern)
-    @test P[:, :, 2] ≈ R*Q*R'
+    t_init!(H, P, s, H_1, P_0, s_0)
+    llk_1 = kalman_filter!(y, zeros(ny), Z_1, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws2, full_data_pattern)
+    @show ws2.lik[1:5] .- ny*log(2*pi)
 
     P = zeros(ns, ns)
-    s = copy(s_0)
+    s = zeros(ns)
+    t_init!(H, P, s, H_1, P_0, s_0)
     
-    llk_2 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
+    llk_2 = kalman_likelihood(y, Z_1, H, T, R, Q, s, P, 1, nobs, 0, ws1)
+    @show ws1.lik[1:5]
     @test llk_2  ≈ llk_1
-
-    P = zeros(ns, ns)
-    s = copy(s_0)
+     
+    t_init!(H, P, s, H_1, P_0, s_0)
     
-    llk_3 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    llk_3 = kalman_likelihood(y, Z_1, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
     @test llk_3  ≈ llk_1
+ 
+    t_init!(H, P, s, H_1, P_0, s_0)
 
-    P = zeros(ns, ns)
-    s = copy(s_0)
     
-    llk_4 = kalman_likelihood_monitored(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
+    llk_4 = kalman_likelihood_monitored(y, Z_1, H, T, R, Q, s, P, 1, nobs, 0, ws1)
     @test llk_4  ≈ llk_1
 
-    P = zeros(ns, ns)
-    s = copy(s_0)
+    t_init!(H, P, s, H_1, P_0, s_0)
+
     
-    llk_5 = kalman_likelihood_monitored(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    llk_5 = kalman_likelihood_monitored(y, Z_1, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
     @test llk_5  ≈ llk_1
 
 end
 
 @testset "Singular F matrix Full H" begin
-    H = randn(ny, ny)
-    H = H'*H
+    Z_1 = copy(Z)
+    Z_1[3, :] = Z[1, :] + Z[2, :]
+    H_1 = Z_1*P_0*Z_1'
+    @show det(Z_1*P_0*Z_1' + H_1) 
     
     ws1 = KalmanLikelihoodWs(ny, ns, np, nobs)
     ws2 = KalmanFilterWs(ny, ns, np, nobs)
@@ -111,31 +165,29 @@ end
     Ptt = zeros(ns, ns, nobs)
     stt = zeros(ns, nobs)
 
-    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws2, full_data_pattern)
-    @test P[:, :, 2] ≈ R*Q*R'
+    t_init!(H, P, s, H_1, P_0, s_0)
+    llk_1 = kalman_filter!(y, zeros(ny), Z_1, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws2, full_data_pattern)
 
     P = zeros(ns, ns)
-    s = copy(s_0)
-    
-    llk_2 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
+    s = zeros(ns) 
+    t_init!(H, P, s, H_1, P_0, s_0)
+   
+    llk_2 = kalman_likelihood(y, Z_1, H, T, R, Q, s, P, 1, nobs, 0, ws1)
     @test llk_2  ≈ llk_1
 
-    P = zeros(ns, ns)
-    s = copy(s_0)
+    t_init!(H, P, s, H_1, P_0, s_0)
     
-    llk_3 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    llk_3 = kalman_likelihood(y, Z_1, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
     @test llk_3  ≈ llk_1
 
-    P = zeros(ns, ns)
-    s = copy(s_0)
+    t_init!(H, P, s, H_1, P_0, s_0)
     
-    llk_4 = kalman_likelihood_monitored(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
+    llk_4 = kalman_likelihood_monitored(y, Z_1, H, T, R, Q, s, P, 1, nobs, 0, ws1)
     @test llk_4  ≈ llk_1
 
-    P = zeros(ns, ns)
-    s = copy(s_0)
+    t_init!(H, P, s, H_1, P_0, s_0)
     
-    llk_5 = kalman_likelihood_monitored(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
+    llk_5 = kalman_likelihood_monitored(y, Z_1, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
     @test llk_5  ≈ llk_1
 
 end
@@ -145,20 +197,17 @@ H = copy(H_0)
 @testset "Fast Kalman Filter" begin
     ws1 = KalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
     ws2 = FastKalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
-    P = copy(P_0)
-    s = copy(s_0)
-    
 
-    copy!(s, s_0)
+    P = zeros(ns, ns)
+    s = zeros(ns)
+    t_init!(H, P, s, H_0, P_0, s_0)
     llk_1 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
 
-    copy!(P, P_0)
-    copy!(s, s_0)
+    t_init!(H, P, s, H_0, P_0, s_0)
     llk_2 = fast_kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws2)
     @test llk_2 ≈ llk_1
 
-    copy!(P, P_0)
-    copy!(s, s_0)
+    t_init!(H, P, s, H_0, P_0, s_0)
     llk_3 = fast_kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws2, full_data_pattern)
     @test llk_3 ≈ llk_1
 
@@ -175,27 +224,21 @@ end
     Z[3, 2] = 1
     z = [4, 3, 2]
 
-    s = copy(s_0)
-    P = copy(P_0)
+    t_init!(H, P, s, H_0, P_0, s_0)
     llk_1 = kalman_likelihood(y, Z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
     
-    s = copy(s_0)
-    P = copy(P_0)
+    t_init!(H, P, s, H_0, P_0, s_0)
     llk_2 = kalman_likelihood(y, z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
     @test llk_1 ≈ llk_2
 
-    s = copy(s_0)
-    P = copy(P_0)
     llk_2 = kalman_likelihood(y, z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
     @test llk_1 ≈ llk_2
 
-    s = copy(s_0)
-    P = copy(P_0)
+    t_init!(H, P, s, H_0, P_0, s_0)
     llk_3 = fast_kalman_likelihood(y, z, H, T, R, Q, s, P, 1, nobs, 0, ws2)
     @test llk_1 ≈ llk_3
 
-    s = copy(s_0)
-    P = copy(P_0)
+    t_init!(H, P, s, H_0, P_0, s_0)
     llk_3 = fast_kalman_likelihood(y, z, H, T, R, Q, s, P, 1, nobs, 0, ws2, full_data_pattern)
     @test llk_1 ≈ llk_3
 
@@ -334,7 +377,7 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     t = KalmanFilterTools.diffuse_kalman_likelihood_init!(Y, z, H, T, ws4.QQ, a, Pinf, 
                                                           Pstar, 1, nobs, 1e-8, ws4)
     llk_3 = -0.5*(t*ny*log(2*pi) + sum(ws4.lik[1:t]))
-    @show llk_3
+
     # Dynare returns minus log likelihood
     @test llk_3 ≈ -vars["dLIK"]
     @test a ≈ vars["a"]
