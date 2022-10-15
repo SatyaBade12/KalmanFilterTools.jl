@@ -11,13 +11,19 @@ function univariate_step!(t, Y, Z, H, T, QQ, a, P, kalman_tol, ws)
 end
 =#
 
+#=
 function transformed_measurement!(ystar, Zstar, y, Z, cholH)
-    LTcholH = LowerTriangular(cholH)
+    UTcholH = UpperTriangular(cholH)
+    ystar .= transpose(UTcholH)\y
+    Zstar .= transpose(UTcholH)\Z
+    #=`
     copy!(ystar, y)
-    ldiv!(LTcholH, ystar)
+    ldiv!(UTcholH, ystar)
     copy!(Zstar, Z)
-    ldiv!(LTcholH, Zstar)
+    ldiv!(UTcholH, Zstar)
+    =#
 end
+=#
 
 function logproddiag(A)
     @assert isdiag(A)
@@ -31,6 +37,7 @@ end
 function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws)
     ny = size(Y,1)
     if !isdiag(H)
+        error("singular F with non-diagonal H matrix not yet supported")
         transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
 	logdetcholH = 0.0
@@ -49,9 +56,6 @@ function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws)
             # P = P - PZi*PZi'/F
             ger!(-1.0/F, ws.PZi, ws.PZi, P)
             llik += log(F) + v*v/F
-            if t <= 6
-                @show v, F, ws.PZi[i], a[i], P[i,i]
-            end
         end
     end
     mul!(ws.a1, T, a)
@@ -65,6 +69,7 @@ end
 function univariate_step!(Y, t, Z, H, T, RQR, a, P, kalman_tol, ws, pattern)
     ny = size(Y,1)
     if !isdiag(H)
+        error("singular F with non-diagonal H matrix not yet supported")
         transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
 	logdetcholH = 0.0
@@ -97,6 +102,7 @@ end
 function univariate_step(Y, t, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws)
     ny = size(Y,1)
     if !isdiag(H)
+        error("singular F with non-diagonal H matrix not yet supported")
         transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
 	logdetcholH = 0.0
@@ -147,6 +153,7 @@ end
 function univariate_step(Y, t, Z, H, T, QQ, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws, pattern)
     ny = size(Y,1)
     if !isdiag(H)
+        error("singular F with non-diagonal H matrix not yet supported")
         transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
 	logdetcholH = 0.0
@@ -198,6 +205,7 @@ end
 function univariate_step!(Y, c, t, Z, H, d, T, RQR, a, P, kalman_tol, ws)
     ny = size(Y,1)
     if !isdiag(H)
+        error("singular F with non-diagonal H matrix not yet supported")
         transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
 	logdetcholH = 0.0
@@ -231,6 +239,7 @@ end
 function univariate_step!(att, a1, Ptt, P1, Y, t, c, Z, H, d, T, RQR, a, P, kalman_tol, ws, pattern)
     ny = size(Y,1)
     if !isdiag(H)
+        error("singular F with non-diagonal H matrix not yet supported")
         transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
 	logdetcholH = 0.0
@@ -252,9 +261,6 @@ function univariate_step!(att, a1, Ptt, P1, Y, t, c, Z, H, d, T, RQR, a, P, kalm
             # P = P - PZi*PZi'/F
             ger!(-1.0/F, ws.PZi, ws.PZi, Ptt)
             llik += log(F) + v*v/F
-            if t <=  6
-                @show v, F, ws.PZi[i], a[i], P[i, i]
-            end
         end
     end
     copy!(a1, d)
@@ -268,6 +274,7 @@ end
 function univariate_step(Y, t, c, Z, H, d, T, RQR, a, Pinf, Pstar, diffuse_kalman_tol, kalman_tol, ws)
     ny = size(Y,1)
     if !isdiag(H)
+        error("singular F with non-diagonal H matrix not yet supported")
         transformed_measurement!(ws.ystar, ws.Zstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
 	logdetcholH = 0.0
@@ -331,6 +338,7 @@ function univariate_step(att, a1, Pinftt, Pinf1, Pstartt, Pstar1, Y, t, c, Z, H,
     vystar = view(ws.ystar, 1:ndata)
     vZstar = view(ws.Zstar, 1:ndata, :)
     if !isdiag(H)
+        error("singular F with non-diagonal H matrix not yet supported")
         transformed_measurement!(ws.ystar, vZstar, view(Y, :, t), Z, ws.cholH)
         H = I(ny)
 	logdetcholH = 0.0

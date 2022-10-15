@@ -13,6 +13,7 @@ nobs = 50
 
 ws = KalmanLikelihoodWs{Float64, Integer}(ny, ns, np, nobs)
 
+#=
 y = randn(ny)
 ystar = similar(y)
 Z = randn(ny, ns)
@@ -23,12 +24,13 @@ cholH = copy(H)
 LAPACK.potrf!('L', H)
 KalmanFilterTools.transformed_measurement!(ystar, Zstar, y, Z, cholH)
 @test y ≈ LowerTriangular(cholH)*ystar
+=#
 
 nobs = 1
 ws = KalmanLikelihoodWs{Float64, Integer}(ny, ns, np, nobs)
 Y = randn(ny, nobs+1)
 t = 1
-ystar = similar(y)
+ystar = similar(Y)
 Z = randn(ny, ns)
 Zstar = similar(Z)
 H = randn(ny, ny)
@@ -46,7 +48,7 @@ P = randn(ns, ns)
 P = P'*P
 kalman_tol = eps()^(2/3)
 
-#=
+
 ws1 = KalmanLikelihoodWs{Float64, Integer}(1, ns, np, 3)
 a0 = copy(a)
 aa0 = cat(a0, zeros(ns), zeros(ns), zeros(ns); dims=3)
@@ -54,8 +56,10 @@ P0 = copy(P)
 PP0 = cat(P0, zeros(ns,ns), zeros(ns,ns), zeros(ns,ns); dims=3)
 ZZ = cat(Z[1,:]', Z[2,:]', Z[3,:]'; dims=3)
 TT = I(ns) + zeros(ns, ns)
-lik1a = KalmanFilterTools.kalman_filter!(Y[:,1]', zeros(3), ZZ, H, zeros(ns), TT, R, zeros(np, np), aa0, PP0, 1, 3, 0, ws1,[[1], [1], [1]])
-=#
+att = similar(aa0)
+Ptt = similar(PP0)
+#lik1a = KalmanFilterTools.kalman_filter!(Y[:,1]', zeros(3), Z, H, zeros(ns), TT, R, zeros(np, np), aa0, att, PP0, Ptt, 1, 3, 0, ws1,[[1], [1], [1]])
+
 
 a0 = copy(a)
 P0 = copy(P)

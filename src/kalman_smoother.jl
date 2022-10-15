@@ -156,7 +156,6 @@ function kalman_smoother!(Y::AbstractArray{V},
         viF = view(ws.iF, 1:ndata, 1:ndata, t)
         viFv = view(ws.iFv, 1:ndata, t)
         viFZ = view(ws.iFZ, 1:ndata, :)
-
         mul!(vKDK, vT, transpose(vK))
 
         # L_t = T - KDK_t*Z (DK 4.29)
@@ -394,6 +393,7 @@ function diffuse_kalman_smoother_coda!(Y::AbstractArray{V},
     N2 = ws.N2
     N2_1 = ws.N2_1
 
+    fill!(r0_1, 0.0)
     fill!(r1_1, 0.0)
 
     ny = size(Y, 1)

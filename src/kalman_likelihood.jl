@@ -63,7 +63,7 @@ KalmanLikelihoodWs(ny, ns, np, nobs) = KalmanLikelihoodWs{Float64, Int64}(ny, ns
 
 # Z can be either a matrix or a selection vector
 function kalman_likelihood(Y::AbstractMatrix{X},
-                           Z::AbstractMatrix{W},
+                           Z::AbstractVecOrMat{W},
                            H::AbstractMatrix{U},
                            T::AbstractMatrix{U},
                            R::AbstractMatrix{U},
@@ -88,9 +88,6 @@ function kalman_likelihood(Y::AbstractMatrix{X},
         # F  = Z*P*Z' + H
         get_F!(ws.F, ws.ZP, Z, P, H)
         info = get_cholF!(ws.cholF, ws.F)
-        if t <= start + 6
-            @show t, det(ws.F), info
-        end
         if info != 0
             # F is near singular
             if !cholHset
@@ -98,7 +95,6 @@ function kalman_likelihood(Y::AbstractMatrix{X},
                 cholHset = true
             end
             ws.lik[t] = univariate_step!(Y, t, Z, H, T, ws.QQ, a, P, ws.kalman_tol, ws)
-            t <= start + 5 && @show ws.lik[t]
         else
             # iFv = inv(F)*v
             get_iFv!(ws.iFv, ws.cholF, ws.v)
@@ -118,7 +114,7 @@ function kalman_likelihood(Y::AbstractMatrix{X},
 end
 
 function kalman_likelihood(Y::AbstractMatrix{X},
-                           Z::AbstractMatrix{W},
+                           Z::AbstractVecOrMat{W},
                            H::AbstractMatrix{U},
                            T::AbstractMatrix{U},
                            R::AbstractMatrix{U},
@@ -183,7 +179,7 @@ function kalman_likelihood(Y::AbstractMatrix{X},
 end
 
 function kalman_likelihood_monitored(Y::AbstractMatrix{X},
-                                     Z::AbstractMatrix{W},
+                                     Z::AbstractVecOrMat{W},
                                      H::AbstractMatrix{U},
                                      T::AbstractMatrix{U},
                                      R::AbstractMatrix{U},
@@ -250,7 +246,7 @@ function kalman_likelihood_monitored(Y::AbstractMatrix{X},
 end
 
 function kalman_likelihood_monitored(Y::AbstractMatrix{X},
-                                     Z::AbstractMatrix{W},
+                                     Z::AbstractVecOrMat{W},
                                      H::AbstractMatrix{U},
                                      T::AbstractMatrix{U},
                                      R::AbstractMatrix{U},
@@ -394,7 +390,7 @@ FastKalmanLikelihoodWs(ny, ns, np, nobs) = FastKalmanLikelihoodWs{Float64, Int64
 K doesn't represent the same matrix as above
 """
 function fast_kalman_likelihood(Y::Matrix{U},
-                                Z::AbstractMatrix{W},
+                                Z::AbstractVecOrMat{W},
                                 H::Matrix{U},
                                 T::Matrix{U},
                                 R::Matrix{U},
@@ -446,7 +442,7 @@ function fast_kalman_likelihood(Y::Matrix{U},
 end
 
 function fast_kalman_likelihood(Y::Matrix{U},
-                                Z::AbstractMatrix{W},
+                                Z::AbstractVecOrMat{W},
                                 H::Matrix{U},
                                 T::Matrix{U},
                                 R::Matrix{U},
@@ -578,7 +574,7 @@ end
 DiffuseKalmanLikelihoodWs(ny, ns, np, nobs) = DiffuseKalmanLikelihoodWs{Float64, Int64}(ny, ns, np, nobs)
 
 function diffuse_kalman_likelihood_init!(Y::Matrix{U},
-                                         Z::AbstractMatrix{W},
+                                         Z::AbstractVecOrMat{W},
                                          H::Matrix{U},
                                          T::Matrix{U},
                                          QQ::Matrix{U},
@@ -640,7 +636,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
 end
 
 function diffuse_kalman_likelihood_init!(Y::Matrix{U},
-                                         Z::AbstractMatrix{W},
+                                         Z::AbstractVecOrMat{W},
                                          H::Matrix{U},
                                          T::Matrix{U},
                                          QQ::Matrix{U},
@@ -718,7 +714,7 @@ function diffuse_kalman_likelihood_init!(Y::Matrix{U},
 end
 
 function diffuse_kalman_likelihood(Y::Matrix{U},
-                                   Z::AbstractMatrix{W},
+                                   Z::AbstractVecOrMat{W},
                                    H::Matrix{U},
                                    T::Matrix{U},
                                    R::Matrix{U},
@@ -744,7 +740,7 @@ function diffuse_kalman_likelihood(Y::Matrix{U},
 end
 
 function diffuse_kalman_likelihood(Y::Matrix{U},
-                                   Z::AbstractMatrix{W},
+                                   Z::AbstractVecOrMat{W},
                                    H::Matrix{U},
                                    T::Matrix{U},
                                    R::Matrix{U},

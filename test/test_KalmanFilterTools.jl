@@ -109,8 +109,6 @@ end
     Z_1[1, 1] -= sqrt(P_0[1,1])
     Z_1[2, 2] -= sqrt(P_0[2,2])
     Z_1[3, 3] -= sqrt(P_0[3,3])
-    @show det(Z_1*P_0*Z_1' + H) 
-
     
     ws1 = KalmanLikelihoodWs(ny, ns, np, nobs)
     ws2 = KalmanFilterWs(ny, ns, np, nobs)
@@ -122,14 +120,12 @@ end
     
     t_init!(H, P, s, H_1, P_0, s_0)
     llk_1 = kalman_filter!(y, zeros(ny), Z_1, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws2, full_data_pattern)
-    @show ws2.lik[1:5] .- ny*log(2*pi)
 
     P = zeros(ns, ns)
     s = zeros(ns)
     t_init!(H, P, s, H_1, P_0, s_0)
     
     llk_2 = kalman_likelihood(y, Z_1, H, T, R, Q, s, P, 1, nobs, 0, ws1)
-    @show ws1.lik[1:5]
     @test llk_2  ≈ llk_1
      
     t_init!(H, P, s, H_1, P_0, s_0)
@@ -151,12 +147,44 @@ end
 
 end
 
+#=
+@testset "transformed measurement" begin
+    ws =  KalmanFilterWs(ny, ns, np, nobs)
+    t_init!(H, P, s, H_0, P_0, s_0)
+    Ptt = zeros(ns, ns)
+    stt = zeros(ns)
+    llk_1 = kalman_filter!(y, zeros(ny), Z, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws, full_data_pattern)
+    v = copy(ws.v)
+    F = ws.F
+    
+    ws =  KalmanFilterWs(ny, ns, np, nobs)
+    t_init!(H, P, s, H_0, P_0, s_0)
+    ystar = similar(y)
+    Zstar = similar(Z)
+    KalmanFilterTools.get_cholF!(ws.cholH, H)
+    KalmanFilterTools.transformed_measurement!(ystar, Zstar, y, Z, ws.cholH)
+    UTcholH = UpperTriangular(ws.cholH)
+    @test ystar ≈ UTcholH'\y
+    @test Zstar ≈ UTcholH'\Z
+    H_1 = Matrix{Float64}(I(ny))
+    Ptt = zeros(ns, ns)
+    stt = zeros(ns)
+    llk_2 = kalman_filter!(ystar, zeros(ny), Zstar, H_1, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws, full_data_pattern)
+    @test ws.v[:, 1] ≈ UTcholH'\v[:,1]
+    @test ws.F ≈ UTcholH'\F/UTcholH
+    @test llk_1 ≈ llk_2
+end
+
 @testset "Singular F matrix Full H" begin
     Z_1 = copy(Z)
     Z_1[3, :] = Z[1, :] + Z[2, :]
     H_1 = Z_1*P_0*Z_1'
-    @show det(Z_1*P_0*Z_1' + H_1) 
-    
+    HHH = Z_1*P_0*Z_1' + H_1
+    Z_1[1,1] += sqrt(0.1/P_0[1,1])
+    H_1 = HHH - Z_1*P_0*Z_1'
+    @show det(HHH)
+    @test det(Z_1*P_0*Z_1' + H_1) < 1e-10
+
     ws1 = KalmanLikelihoodWs(ny, ns, np, nobs)
     ws2 = KalmanFilterWs(ny, ns, np, nobs)
     P = zeros(ns, ns, nobs+1)
@@ -164,6 +192,37 @@ end
     s[:, 1] .= s_0
     Ptt = zeros(ns, ns, nobs)
     stt = zeros(ns, nobs)
+
+    t_init!(H, P, s, H_1, P_0, s_0)
+    Z_2 = copy(Z_1)
+    Z_2[1, 3] += 1e-6
+    # v  = Y[:,t] - Z*a
+    iy = 1
+    KalmanFilterTools.get_v!(ws1.v, y, Z_2, s[:,1], iy, ny)
+    @show ws1.v
+    # F  = Z*P*Z' + H
+    KalmanFilterTools.get_F!(ws1.F, ws1.ZP, Z_2, P[:,:,1], H)
+    FF = copy(ws1.F)
+    HH = copy(H)
+    info = KalmanFilterTools.get_cholF!(ws1.cholF, FF)
+    @show info
+    @show HH
+    @show ws1.v
+    KalmanFilterTools.get_cholF!(ws1.cholH, H)
+    @show ws1.cholF
+    @show ws1.cholH
+    UTcholH = UpperTriangular(ws1.cholH)
+    H3 = copy(H)
+    @show UTcholH' \ H3 / UTcholH
+    @show KalmanFilterTools.univariate_step!(y, 1, Z_2, HH, T, ws1.QQ, s[:,1], P[:,:,1], ws1.kalman_tol, ws1)
+    @show ws1.v
+    KalmanFilterTools.get_iFv!(ws1.iFv, ws1.cholF, ws1.v)
+    @show det(ws1.F)
+    @show inv(ws1.F)
+    @show ws1.iFv
+    @show log(KalmanFilterTools.det_from_cholesky(ws1.cholF))
+    @show LinearAlgebra.dot(ws1.v, ws1.iFv)
+    @show log(KalmanFilterTools.det_from_cholesky(ws1.cholF)) + LinearAlgebra.dot(ws1.v, ws1.iFv)
 
     t_init!(H, P, s, H_1, P_0, s_0)
     llk_1 = kalman_filter!(y, zeros(ny), Z_1, H, zeros(ns), T, R, Q, s, stt, P, Ptt, 1, nobs, 0, ws2, full_data_pattern)
@@ -189,8 +248,8 @@ end
     
     llk_5 = kalman_likelihood_monitored(y, Z_1, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
     @test llk_5  ≈ llk_1
-
 end
+=#
 
 H = copy(H_0)    
 # Fast Kalman Filter
@@ -231,6 +290,7 @@ end
     llk_2 = kalman_likelihood(y, z, H, T, R, Q, s, P, 1, nobs, 0, ws1)
     @test llk_1 ≈ llk_2
 
+    t_init!(H, P, s, H_0, P_0, s_0)
     llk_2 = kalman_likelihood(y, z, H, T, R, Q, s, P, 1, nobs, 0, ws1, full_data_pattern)
     @test llk_1 ≈ llk_2
 
@@ -283,9 +343,9 @@ end
     ss[:, 1] = s_0
     Ps[:, :, 1] = P_0
     kalman_filter!(y, cs, Zs, Hs, ds, Ts, Rs, Qs, ss, stt, Ps, Ptt, 1, nobs1, 0, ws1, full_data_pattern)
-    @test ss[:, nobs1+1] ≈ s
-    @test Ps[:, : , nobs1+1] ≈ P
-
+    @test ss[:, 2] ≈ s
+    @test Ps[:, :, 2] ≈ P
+#=
     ws2 = KalmanSmootherWs{Float64, Int64}(ny, ns, np, nobs)
     ss1 = zeros(ns, nobs+1)
     ss1[:, 1] = s_0
@@ -308,6 +368,7 @@ end
     end
     kalman_smoother!(y, cs, Zs, Hs, ds, Ts, Rs, Qs, ss1, stt, Ps1, Ptt, alphah, epsilonh, etah, Valpha, Vepsilon, Veta, 1, nobs, 0, ws2, full_data_pattern)
     @test y ≈ view(alphah, [4, 3, 2], :)
+=#
 end
 
 # Replication data computed with Dynare
@@ -368,8 +429,6 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     @test llk_3 ≈ -0.5*sum(ws5.lik[1:t1])
     @test aa[:, t1 + 1] ≈ vars["a"]
     @test PPstar[:, :, t1 + 1] ≈ vars["Pstar1"]
-    display(PPstar[:,:,t1+1])
-    display(vars["Pstar1"])
     z = [4, 3]
     a = copy(a_0)
     Pinf = copy(Pinf_0)
@@ -377,7 +436,7 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     t = KalmanFilterTools.diffuse_kalman_likelihood_init!(Y, z, H, T, ws4.QQ, a, Pinf, 
                                                           Pstar, 1, nobs, 1e-8, ws4)
     llk_3 = -0.5*(t*ny*log(2*pi) + sum(ws4.lik[1:t]))
-
+    
     # Dynare returns minus log likelihood
     @test llk_3 ≈ -vars["dLIK"]
     @test a ≈ vars["a"]
@@ -442,7 +501,7 @@ full_data_pattern = [collect(1:ny) for o = 1:nobs]
     @test llk_3 ≈ -vars["dLIK"]
     @test a ≈ vars["a"]
     @test Pstar ≈ vars["Pstar1"]
-
+    
     a = copy(a_0)
     Pinf = copy(Pinf_0)
     Pstar = copy(Pstar_0)
@@ -565,4 +624,5 @@ end
 end    
 
 nothing
+
 
