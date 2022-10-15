@@ -631,7 +631,7 @@ function update_r!(r1::AbstractVector{T}, z::AbstractVector{U}, iFv::AbstractVec
     gemm!('T', 'N', 1.0, L, r, 1.0, r1)
 end
 
-# r1_{t-1} = Z_t'*iFinf_t*v_t + L0_t'r1_t + L1_t'*0_t      (DK 5.21)
+# r1_{t-1} = Z_t'*iFinf_t*v_t + L0_t'r1_t + L1_t'*r0_t      (DK 5.21)
 function update_r!(r1::AbstractVector{T}, Z::AbstractArray{T},
                    iFv::AbstractVector{T}, L0::AbstractArray{T},
                    r1_1::AbstractVector{T}, L1::AbstractArray{T},
