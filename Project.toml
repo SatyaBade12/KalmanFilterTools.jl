@@ -1,7 +1,7 @@
 name = "KalmanFilterTools"
 uuid = "ec016732-9331-11e9-305f-d53cb440b85a"
 authors = ["Michel Juillard <michel.juillard@mjui.fr>"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
