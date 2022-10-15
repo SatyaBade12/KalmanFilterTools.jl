@@ -191,7 +191,6 @@ function kalman_filter!(Y::AbstractArray{X},
         vZP = view(ws.ZP, 1:ndata, :)
         vcholF = view(ws.cholF, 1:ndata, 1:ndata, t)
         vcholH = view(ws.cholH, 1:ndata, 1:ndata)
-    
         if ndata == 0
             # no observation this period
             if t <= last
@@ -208,9 +207,6 @@ function kalman_filter!(Y::AbstractArray{X},
         # F  = Z*P*Z' + H
         get_F!(vF, vZP, vZsmall, vP, vvH)
         info = get_cholF!(vcholF, vF)
-        if t <= start + 6
-            @show t, det(vF), info
-        end
         if info != 0
             # F is near singular
             if !cholHset
@@ -218,37 +214,18 @@ function kalman_filter!(Y::AbstractArray{X},
                 cholHset = true
             end
             ws.lik[t] = ndata*l2pi + univariate_step!(vatt, va1, vPtt, vP1, Y, t, c, ws.Zsmall, vvH, d, T, ws.QQ, va, vP, ws.kalman_tol, ws, pattern)
-            t <= start + 5 && @show ws.lik[t] - ndata*l2pi, va1
             t += 1
             continue
         end
         # iFv = inv(F)*v
         get_iFv!(viFv, vcholF, vv)
         ws.lik[t] = ndata*l2pi + log(det_from_cholesky(vcholF)) + LinearAlgebra.dot(vv, viFv)
-        # don't update in last period
-        if t < last
-            full_update!(va1, va, vatt, vd, vcholF, vK, vP1, vP, vPtt, vT, vv, vZP, d, steady, ws)            
-            if t == 5
-                @show vatt
-                @show va1
-                @show vPtt[1,:]
-                @show vP1[1, :]
-                vattZ = similar(vatt)
-                va1Z = similar(va1)
-                vPttZ = similar(vPtt)
-                vP1Z = similar(vP1)
-                univariate_step!(vattZ, va1Z, vPttZ, vP1Z, Y, t, c, ws.Zsmall, vvH, d, T, ws.QQ, va, vP, ws.kalman_tol, ws, pattern)
-                @show vattZ
-                @show va1Z
-                @show vPttZ[1,:]
-                @show vP1Z[1, :]
-            end
-            if changeP && steady && t > 1
-                # steady state: covariances are just copied over 
-                copy!(vP1, vP)
-                vPtt_1 = view(Ptt, :, : , t-1)
-                copy!(vPtt, vPtt_1)
-            end
+        full_update!(va1, va, vatt, vd, vcholF, vK, vP1, vP, vPtt, vT, vv, vZP, d, steady, ws)
+        if changeP && steady && t > 1
+            # steady state: covariances are just copied over
+            copy!(vP1, vP)
+            vPtt_1 = view(Ptt, :, : , t-1)
+            copy!(vPtt, vPtt_1)
         end
         t += 1
     end
