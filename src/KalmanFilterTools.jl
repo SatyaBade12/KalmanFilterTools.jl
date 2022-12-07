@@ -38,4 +38,9 @@ include("kalman_filter.jl")
 include("kalman_smoother.jl")
 include("univariate_step.jl")
 
+import SnoopPrecompile
+SnoopPrecompile.@precompile_all_calls begin
+  include("../test/runtests.jl")
+end
+
 end #module

@@ -4,7 +4,11 @@ authors = ["Michel Juillard <michel.juillard@mjui.fr>"]
 version = "0.1.1"
 
 [deps]
+HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MAT = "23992714-dd62-5051-b70f-ba57cb901cac"
+SnoopPrecompile = "66db9d55-30c0-4569-8b51-7e840670fc0c"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 julia = "1.6"
