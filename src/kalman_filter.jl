@@ -136,7 +136,7 @@ function kalman_filter!(Y::AbstractArray{X},
                         start::V,
                         last::V,
                         presample::V,
-                        ws::KalmanWs,
+                        ws::KalmanWs{U, V},
                         data_pattern::Vector{Vector{V}}) where {U <: Real, W <: Real, V <: Integer, X <: Union{Real, Missing}}
     changeC = ndims(c) > 1
     changeH = ndims(H) > 2
