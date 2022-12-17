@@ -199,7 +199,7 @@ end
 # L_t = T - K(DK)_t*Z (DK 4.29)
 function get_L!(L::AbstractArray{U}, T::AbstractArray{U}, K::AbstractArray{U}, Z::AbstractArray{U}) where U <: AbstractFloat
     copy!(L, T)
-    mul!(L, K, Z, T(-1), T(1))
+    mul!(L, K, Z, U(-1), U(1))
 end
 
 # L_t = T - K(DK)_t*z (DK 4.29)
