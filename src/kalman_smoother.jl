@@ -329,7 +329,7 @@ struct DiffuseKalmanSmootherWs{T, U} <: KalmanWs{T, U}
         tmp_ny_ns = Matrix{T}(undef, ny, ns)
         kalman_tol = 1e-12
 
-        new(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, Fstar,
+        new{T, U}(csmall, Zsmall, iZsmall, RQ, QQ, v, F, cholF, Fstar,
             cholH, iF, iFv, a1, r, r_1, r1, r1_1, at_t, K, Kinf,
             KDK, KDKinf, L, L1, N, N_1, N1, N1_1, N2, N2_1, ZP,
             ZPstar, Kv, iFZ, PTmp, oldP, lik, KT, D, uKinf, uKstar,
