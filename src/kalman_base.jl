@@ -386,11 +386,11 @@ end
 # Valpha_t = Pstar_t - Pstar_t*N0_{t-1}*Pstar_t
 #            -(Pinf_t*N1_{t-1}*Pstar_t)' -Pinf_t*N1_{t-1}*Pstar_t -
 #            -Pinf_t*N2_{t-1}*Pinf_t                      (DK 5.30)
-function get_Valpha!(Valpha::A,
-                     Pstar::B,
-                     Pinf::C, N0::AbstractArray{T},
+function get_Valpha!(Valpha::AbstractArray{T},
+                     Pstar::AbstractArray{T},
+                     Pinf::AbstractArray{T}, N0::AbstractArray{T},
                      N1::AbstractArray{T}, N2::AbstractArray{T},
-                     Tmp::AbstractArray{T}) where {T <: AbstractFloat, A<:AbstractArray{T}, B<:AbstractArray{T}, C<:AbstractArray{T}}
+                     Tmp::AbstractArray{T}) where T <: AbstractFloat
     copy!(Valpha, Pstar)
     mul!(Tmp, Pstar, N0)
     mul!(Tmp, Pinf, N1, T(1), T(1))
