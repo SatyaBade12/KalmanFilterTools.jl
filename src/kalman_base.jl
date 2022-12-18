@@ -401,7 +401,7 @@ function get_Valpha!(Valpha::AbstractArray{T},
 end
 
 # Vepsilon_t = H - H*D_t*H
-function get_Vepsilon!(Vepsilon::AbstractArray{T}, H::AbstractArray{T}, D::AbstractArray{T}, tmp::AbstractArray{T}) where T <: AbstractFloat
+function get_Vepsilon!(Vepsilon::a, H::b, D::c, tmp::d) where {T<:AbstractFloat, a<:AbstractArray{T}, b<:AbstractArray{T}, c<:AbstractArray{T}, d<:AbstractArray{T}}
     copy!(Vepsilon, H)
     mul!(tmp, H, D)
     mul!(Vepsilon, tmp, H, T(-1), T(1))
